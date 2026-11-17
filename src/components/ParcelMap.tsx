@@ -133,7 +133,7 @@ export function ParcelMap({ centroid, geometry, parcelLabel, zoneCode }: ParcelM
   }, [centroid?.lat, centroid?.lng, geometry, parcelLabel, zoneCode])
 
   return (
-    <div className="relative h-[360px] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+    <div className="relative h-[460px] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
       <div ref={containerRef} className="h-full w-full" />
     </div>
   )

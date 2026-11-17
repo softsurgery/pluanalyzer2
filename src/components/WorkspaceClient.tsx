@@ -435,6 +435,13 @@ export function WorkspaceClient({
             onLocationModeChange={setLocationMode}
             address={address}
             onAddressChange={setAddress}
+            onAddressSelect={(suggestion) => {
+              setMapPreview((prev) => ({
+                ...prev,
+                centroid: suggestion.coordinates,
+                label: suggestion.label,
+              }));
+            }}
             idu={idu}
             onIduChange={setIdu}
             selectedParcelId={selectedParcelId}

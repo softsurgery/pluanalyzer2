@@ -13,6 +13,28 @@ export async function fetchParcels(limit = 50): Promise<PaginatedResponse<Parcel
   )
 }
 
+export interface AddressSuggestion {
+  label: string
+  city: string
+  postcode: string
+  citycode: string
+  context: string
+  coordinates: { lat: number; lng: number }
+}
+
+export async function fetchAddressSuggestions(
+  query: string,
+  signal?: AbortSignal,
+): Promise<AddressSuggestion[]> {
+  const res = await fetch(
+    `/api/plu/address-suggest?q=${encodeURIComponent(query)}`,
+    { signal },
+  )
+  if (!res.ok) return []
+  const data = (await res.json()) as { suggestions?: AddressSuggestion[] }
+  return data.suggestions ?? []
+}
+
 export async function lookupParcel(input: {
   idu?: string
   address?: string

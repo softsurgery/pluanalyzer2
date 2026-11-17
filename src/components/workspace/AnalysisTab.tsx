@@ -1,7 +1,11 @@
 "use client";
 
 import type React from "react";
-import { Loader2, Play, Search } from "lucide-react";
+import { Loader2, MapPin, Play, Search } from "lucide-react";
+import {
+  fetchAddressSuggestions,
+  type AddressSuggestion,
+} from "@/api/parcels";
 import type { ParcelRecord } from "@/types/parcels";
 import type { ProjectItem } from "@/types/projects";
 import { MarkerPicker, type MarkerCoordinates } from "@/components/MarkerPicker";
@@ -14,6 +18,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { InteractiveSelect } from "@/components/ui/interactive-select";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -39,6 +44,7 @@ export interface AnalysisTabProps {
   onLocationModeChange: (mode: LocationInputMode) => void;
   address: string;
   onAddressChange: (value: string) => void;
+  onAddressSelect?: (suggestion: AddressSuggestion) => void;
   idu: string;
   onIduChange: (value: string) => void;
   selectedParcelId: string;
@@ -85,6 +91,7 @@ export function AnalysisTab({
   onLocationModeChange,
   address,
   onAddressChange,
+  onAddressSelect,
   idu,
   onIduChange,
   selectedParcelId,
@@ -183,11 +190,31 @@ export function AnalysisTab({
               >
                 Adresse française (BAN / Géoplateforme)
               </Label>
-              <Input
+              <InteractiveSelect<AddressSuggestion>
                 id="ws-address"
                 value={address}
-                onChange={(e) => onAddressChange(e.target.value)}
+                onChange={onAddressChange}
+                onSelect={onAddressSelect}
+                fetchSuggestions={fetchAddressSuggestions}
+                getItemKey={(item, idx) =>
+                  `${item.label}-${item.coordinates.lat}-${idx}`
+                }
+                getItemLabel={(item) => item.label}
+                renderItem={(item) => (
+                  <div className="flex items-start gap-2">
+                    <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{item.label}</div>
+                      {item.context && (
+                        <div className="truncate text-xs text-muted-foreground">
+                          {item.context}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 placeholder="Ex: 12 Avenue Sextius, Aix-en-Provence"
+                emptyText="Aucune adresse trouvée"
                 disabled={!isAddressMode}
               />
             </div>
