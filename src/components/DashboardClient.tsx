@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   ArrowRight,
@@ -13,6 +13,7 @@ import {
   Layers,
   Loader2,
 } from 'lucide-react'
+import { apiFetch, fetchDashboardStats, fetchProjects, queryKeys } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -34,44 +35,28 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
-interface ProjectItem {
-  id: number | string
-  name: string
-  commune: string
-  codeInsee: string
-  territory?: string | null
-  status?: string | null
-  description?: string | null
-  updatedAt: string
-}
-
-interface DashboardClientProps {
-  projects: ProjectItem[]
-  stats: {
-    projects: number
-    analyses: number
-    snapshots: number
-    documents: number
-  }
-}
-
-export function DashboardClient({ projects, stats }: DashboardClientProps) {
-  const router = useRouter()
+export function DashboardClient() {
+  const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState('')
   const [commune, setCommune] = useState('Aix-en-Provence')
   const [codeInsee, setCodeInsee] = useState('13001')
   const [territory, setTerritory] = useState<'amp' | 'gpu'>('amp')
   const [description, setDescription] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setCreating(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/projects', {
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects(24),
+    queryFn: () => fetchProjects(24),
+  })
+
+  const statsQuery = useQuery({
+    queryKey: queryKeys.dashboardStats,
+    queryFn: fetchDashboardStats,
+  })
+
+  const createProjectMutation = useMutation({
+    mutationFn: () =>
+      apiFetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -82,22 +67,25 @@ export function DashboardClient({ projects, stats }: DashboardClientProps) {
           description,
           status: 'active',
         }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setError(data?.errors?.[0]?.message || 'Impossible de créer le projet')
-        return
-      }
+      }),
+    onSuccess: async () => {
       setName('')
       setDescription('')
       setShowForm(false)
-      router.refresh()
-    } catch {
-      setError('Erreur réseau')
-    } finally {
-      setCreating(false)
-    }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['projects'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardStats }),
+      ])
+    },
+  })
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault()
+    createProjectMutation.mutate()
   }
+
+  const projects = projectsQuery.data?.docs ?? []
+  const stats = statsQuery.data ?? { projects: 0, analyses: 0, snapshots: 0, documents: 0 }
 
   const kpiCards = [
     { label: 'Projets', value: stats.projects, icon: Building2, iconColor: 'text-primary' },
@@ -151,7 +139,9 @@ export function DashboardClient({ projects, stats }: DashboardClientProps) {
                 <Icon className={`h-4 w-4 ${kpi.iconColor}`} />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold text-foreground">{kpi.value}</div>
+                <div className="text-3xl font-bold text-foreground">
+                  {statsQuery.isLoading ? '—' : kpi.value}
+                </div>
               </CardContent>
             </Card>
           )
@@ -221,10 +211,14 @@ export function DashboardClient({ projects, stats }: DashboardClientProps) {
                 </div>
               </div>
 
-              {error && (
+              {createProjectMutation.isError && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
+                  <AlertDescription>
+                    {createProjectMutation.error instanceof Error
+                      ? createProjectMutation.error.message
+                      : 'Impossible de créer le projet'}
+                  </AlertDescription>
                 </Alert>
               )}
 
@@ -232,8 +226,8 @@ export function DashboardClient({ projects, stats }: DashboardClientProps) {
                 <Button type="button" variant="ghost" size="sm" onClick={() => setShowForm(false)}>
                   Annuler
                 </Button>
-                <Button type="submit" size="sm" disabled={creating}>
-                  {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                <Button type="submit" size="sm" disabled={createProjectMutation.isPending}>
+                  {createProjectMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Enregistrer le projet
                 </Button>
               </div>
@@ -245,7 +239,23 @@ export function DashboardClient({ projects, stats }: DashboardClientProps) {
       {/* Projects List */}
       <div className="space-y-4">
         <h2 className="text-lg font-bold text-foreground">Projets actifs</h2>
-        {projects.length === 0 ? (
+        {projectsQuery.isLoading ? (
+          <Card>
+            <CardContent className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Chargement des projets...
+            </CardContent>
+          </Card>
+        ) : projectsQuery.isError ? (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {projectsQuery.error instanceof Error
+                ? projectsQuery.error.message
+                : 'Impossible de charger les projets.'}
+            </AlertDescription>
+          </Alert>
+        ) : projects.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="p-10 text-center text-sm text-muted-foreground">
               Aucun projet trouvé. Créez votre premier projet ci-dessus.

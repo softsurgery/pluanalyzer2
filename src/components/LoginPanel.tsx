@@ -2,7 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Building2, KeyRound, Loader2 } from 'lucide-react'
+import { apiFetch } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -18,32 +20,26 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export function LoginPanel() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [email, setEmail] = useState('planner@pluanalyzer.fr')
   const [password, setPassword] = useState('PluPlanner2026!')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
-    try {
-      const res = await fetch('/api/users/login', {
+  const loginMutation = useMutation({
+    mutationFn: () =>
+      apiFetch('/api/users/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setError(data?.errors?.[0]?.message || 'Identifiants invalides')
-        return
-      }
+      }),
+    onSuccess: () => {
+      queryClient.clear()
       router.refresh()
-    } catch {
-      setError('Erreur réseau lors de la connexion')
-    } finally {
-      setLoading(false)
-    }
+    },
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    loginMutation.mutate()
   }
 
   return (
@@ -88,15 +84,19 @@ export function LoginPanel() {
             />
           </div>
 
-          {error && (
+          {loginMutation.isError && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>
+                {loginMutation.error instanceof Error
+                  ? loginMutation.error.message
+                  : 'Identifiants invalides'}
+              </AlertDescription>
             </Alert>
           )}
 
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? (
+          <Button type="submit" disabled={loginMutation.isPending} className="w-full">
+            {loginMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <KeyRound className="h-4 w-4" />

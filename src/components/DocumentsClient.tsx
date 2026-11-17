@@ -1,8 +1,15 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileText, Info, Loader2, Sparkles, Upload } from 'lucide-react'
+import {
+  apiFetch,
+  type DocumentItem,
+  fetchDocuments,
+  fetchProjects,
+  queryKeys,
+} from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -17,45 +24,44 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
-interface DocumentItem {
-  id: number | string
-  title: string
-  documentType: string
-  commune?: string | null
-  codeInsee?: string | null
-  zoneCode?: string | null
-  extractionStatus?: string | null
-  pageCount?: number | null
-  extractedText?: string | null
-  filename?: string | null
-  updatedAt: string
-}
-
-export function DocumentsClient({
-  documents,
-  projects,
-}: {
-  documents: DocumentItem[]
-  projects: Array<{ id: number | string; name: string }>
-}) {
-  const router = useRouter()
+export function DocumentsClient() {
+  const queryClient = useQueryClient()
   const [title, setTitle] = useState('')
   const [zoneCode, setZoneCode] = useState('UA')
   const [codeInsee, setCodeInsee] = useState('13001')
-  const [projectId, setProjectId] = useState<string>(projects[0] ? String(projects[0].id) : '')
+  const [projectId, setProjectId] = useState('')
   const [file, setFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [extractingId, setExtractingId] = useState<string | number | null>(null)
-  const [selectedDoc, setSelectedDoc] = useState<DocumentItem | null>(documents[0] || null)
+  const [selectedDoc, setSelectedDoc] = useState<DocumentItem | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!file) return
-    setUploading(true)
-    setMessage(null)
+  const documentsQuery = useQuery({
+    queryKey: queryKeys.documents(50),
+    queryFn: () => fetchDocuments(50),
+  })
 
-    try {
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects(50),
+    queryFn: () => fetchProjects(50),
+  })
+
+  const documents = documentsQuery.data?.docs ?? []
+  const projects = projectsQuery.data?.docs ?? []
+
+  useEffect(() => {
+    if (!projectId && projects.length > 0) {
+      setProjectId(String(projects[0].id))
+    }
+  }, [projectId, projects])
+
+  useEffect(() => {
+    if (!selectedDoc && documents.length > 0) {
+      setSelectedDoc(documents[0])
+    }
+  }, [selectedDoc, documents])
+
+  const uploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error('Veuillez sélectionner un fichier.')
       const formData = new FormData()
       formData.append('file', file)
       formData.append(
@@ -69,40 +75,45 @@ export function DocumentsClient({
           project: projectId ? Number(projectId) : undefined,
         }),
       )
-
-      const res = await fetch('/api/documents', {
+      return apiFetch('/api/documents', {
         method: 'POST',
         body: formData,
       })
-      if (!res.ok) {
-        setMessage("Erreur lors de l'upload vers Payload CMS.")
-        return
-      }
+    },
+    onSuccess: async () => {
       setTitle('')
       setFile(null)
       setMessage('Document enregistré dans Payload CMS.')
-      router.refresh()
-    } finally {
-      setUploading(false)
-    }
-  }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['documents'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardStats }),
+      ])
+    },
+    onError: (err) => {
+      setMessage(err instanceof Error ? err.message : "Erreur lors de l'upload vers Payload CMS.")
+    },
+  })
 
-  const handleExtract = async (id: number | string) => {
-    setExtractingId(id)
-    setMessage(null)
-    try {
-      const res = await fetch(`/api/plu/documents/${id}/extract`, { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) {
-        setMessage(data.error || "Échec de l'extraction PDF")
-        return
-      }
+  const extractMutation = useMutation({
+    mutationFn: (id: number | string) =>
+      apiFetch<{ document: DocumentItem; articles?: unknown[] }>(
+        `/api/plu/documents/${id}/extract`,
+        { method: 'POST' },
+      ),
+    onSuccess: async (data) => {
       setSelectedDoc(data.document)
       setMessage(`Extraction terminée (${data.articles?.length || 0} article(s) détecté(s)).`)
-      router.refresh()
-    } finally {
-      setExtractingId(null)
-    }
+      await queryClient.invalidateQueries({ queryKey: ['documents'] })
+    },
+    onError: (err) => {
+      setMessage(err instanceof Error ? err.message : "Échec de l'extraction PDF")
+    },
+  })
+
+  const handleUpload = (e: React.FormEvent) => {
+    e.preventDefault()
+    setMessage(null)
+    uploadMutation.mutate()
   }
 
   return (
@@ -167,8 +178,8 @@ export function DocumentsClient({
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
                 className="max-w-sm cursor-pointer text-xs file:mr-3 file:rounded-md file:bg-secondary file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-secondary-foreground"
               />
-              <Button type="submit" size="sm" disabled={uploading || !file}>
-                {uploading ? (
+              <Button type="submit" size="sm" disabled={uploadMutation.isPending || !file}>
+                {uploadMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Upload className="h-4 w-4" />
@@ -192,62 +203,74 @@ export function DocumentsClient({
           <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
             Documents ({documents.length})
           </h2>
-          {documents.length === 0 ? (
+          {documentsQuery.isLoading ? (
+            <Card>
+              <CardContent className="flex items-center justify-center gap-2 p-8 text-xs text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Chargement des documents...
+              </CardContent>
+            </Card>
+          ) : documents.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="p-8 text-center text-xs text-muted-foreground">
                 Aucun document téléversé pour le moment.
               </CardContent>
             </Card>
           ) : (
-            documents.map((doc) => (
-              <Card
-                key={doc.id}
-                onClick={() => setSelectedDoc(doc)}
-                className={`cursor-pointer transition ${
-                  selectedDoc?.id === doc.id
-                    ? 'border-primary bg-primary/5'
-                    : 'hover:border-muted-foreground/40'
-                }`}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <FileText className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                      <div>
-                        <div className="text-sm font-bold text-foreground">{doc.title}</div>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                          <span>Zone {doc.zoneCode || '—'}</span>
-                          <span>·</span>
-                          <span>INSEE {doc.codeInsee || '—'}</span>
-                          <span>·</span>
-                          <Badge variant="secondary" className="text-[10px]">
-                            {doc.extractionStatus || 'pending'}
-                          </Badge>
+            documents.map((doc) => {
+              const isExtracting =
+                extractMutation.isPending && extractMutation.variables === doc.id
+              return (
+                <Card
+                  key={doc.id}
+                  onClick={() => setSelectedDoc(doc)}
+                  className={`cursor-pointer transition ${
+                    selectedDoc?.id === doc.id
+                      ? 'border-primary bg-primary/5'
+                      : 'hover:border-muted-foreground/40'
+                  }`}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <FileText className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                        <div>
+                          <div className="text-sm font-bold text-foreground">{doc.title}</div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                            <span>Zone {doc.zoneCode || '—'}</span>
+                            <span>·</span>
+                            <span>INSEE {doc.codeInsee || '—'}</span>
+                            <span>·</span>
+                            <Badge variant="secondary" className="text-[10px]">
+                              {doc.extractionStatus || 'pending'}
+                            </Badge>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleExtract(doc.id)
-                      }}
-                      disabled={extractingId === doc.id}
-                    >
-                      {extractingId === doc.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                      )}
-                      Extraire PDF
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setMessage(null)
+                          extractMutation.mutate(doc.id)
+                        }}
+                        disabled={isExtracting}
+                      >
+                        {isExtracting ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                        )}
+                        Extraire PDF
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })
           )}
         </div>
 

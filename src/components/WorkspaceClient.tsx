@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   AlertTriangle,
@@ -20,6 +21,15 @@ import {
   Trash2,
 } from 'lucide-react'
 import { ParcelMap } from './ParcelMap'
+import {
+  apiFetch,
+  fetchParcels,
+  fetchProjects,
+  fetchSnapshots,
+  type ParcelRecord,
+  queryKeys,
+  type SnapshotRecord,
+} from '@/lib/api'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,54 +64,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-export interface SnapshotRecord {
-  id: number | string
-  snapshotLabel: string
-  version: number
-  zoneCode?: string | null
-  validationStatus?: string | null
-  originalPrompt: string
-  addressQuery?: string | null
-  cadastralReferences?: Record<string, unknown> | null
-  geocodingResult?: Record<string, unknown> | null
-  zoningAndGis?: Record<string, unknown> | null
-  extractedArticles?: Array<{ articleNumber: string; title: string; content: string }> | null
-  regulatoryInterpretation?: Record<string, unknown> | null
-  validationReport?: Record<string, unknown> | null
-  constructibilityCalculations?: Record<string, unknown> | null
-  archicadExport?: Record<string, unknown> | null
-  executionLogs?: Array<{ step: string; status: string; durationMs: number; message: string }> | null
-  executionErrors?: Array<{ step: string; error: string }> | null
-  createdAt: string
-}
-
-export interface ParcelRecord {
-  id: number | string
-  idu: string
-  commune?: string | null
-  codeInsee: string
-  section: string
-  numero: string
-  surfaceM2?: number | null
-  address?: string | null
-  centroid?: { lng?: number | null; lat?: number | null } | null
-  geometry?: unknown
-}
-
-interface ProjectSummary {
-  id: number | string
-  name: string
-  commune: string
-  codeInsee: string
-  territory?: string | null
-  status?: string | null
-  description?: string | null
-}
+export type { ParcelRecord, SnapshotRecord }
 
 interface WorkspaceClientProps {
-  projects: ProjectSummary[]
-  parcels: ParcelRecord[]
-  snapshots: SnapshotRecord[]
   initialProjectId?: string
   initialTab?: string
   userRole?: string
@@ -125,9 +90,6 @@ function resolveTabKey(tab?: string): TabKey {
 const AUTO_PARCEL_VALUE = '__auto__'
 
 export function WorkspaceClient({
-  projects,
-  parcels,
-  snapshots: initialSnapshots,
   initialProjectId,
   initialTab,
   userRole,
@@ -135,36 +97,19 @@ export function WorkspaceClient({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>(initialSnapshots)
-  const [activeSnapshot, setActiveSnapshot] = useState<SnapshotRecord | null>(
-    initialSnapshots[0] || null,
-  )
-  const [activeTab, setActiveTab] = useState<TabKey>(() => resolveTabKey(initialTab))
+  const queryClient = useQueryClient()
 
-  const handleTabChange = (nextTab: TabKey) => {
-    setActiveTab(nextTab)
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('tab', nextTab)
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-  }
+  const [activeTab, setActiveTab] = useState<TabKey>(() => resolveTabKey(initialTab))
+  const [projectId, setProjectId] = useState<string>(initialProjectId || '')
+  const [activeSnapshot, setActiveSnapshot] = useState<SnapshotRecord | null>(null)
 
   // Form state
-  const [projectId, setProjectId] = useState<string>(
-    initialProjectId || (projects[0] ? String(projects[0].id) : ''),
-  )
   const [address, setAddress] = useState('12 Avenue Sextius, Aix-en-Provence')
   const [idu, setIdu] = useState('')
-  const [selectedParcelId, setSelectedParcelId] = useState<string>(
-    parcels[0] ? String(parcels[0].id) : '',
-  )
+  const [selectedParcelId, setSelectedParcelId] = useState<string>('')
   const [prompt, setPrompt] = useState(
     'Analyser la constructibilité maximale (emprise, hauteur, SDP, stationnement) pour un bâtiment mixte R+3.',
   )
-
-  // Live lookup & execution state
-  const [lookupLoading, setLookupLoading] = useState(false)
-  const [analyzing, setAnalyzing] = useState(false)
-  const [replayingId, setReplayingId] = useState<string | number | null>(null)
   const [statusBanner, setStatusBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(
     null,
   )
@@ -175,56 +120,113 @@ export function WorkspaceClient({
     geometry?: unknown
     label?: string
     zoneCode?: string
-  }>(() => {
-    const p = parcels[0]
-    return {
-      centroid: p?.centroid,
-      geometry: p?.geometry,
-      label: p ? `${p.idu} (${p.surfaceM2 ?? '?'} m²)` : undefined,
-      zoneCode: initialSnapshots[0]?.zoneCode || undefined,
-    }
-  })
+  }>({})
 
   // Comparison state
-  const [compareA, setCompareA] = useState<string>(
-    initialSnapshots[0] ? String(initialSnapshots[0].id) : '',
-  )
-  const [compareB, setCompareB] = useState<string>(
-    initialSnapshots[1]
-      ? String(initialSnapshots[1].id)
-      : initialSnapshots[0]
-        ? String(initialSnapshots[0].id)
-        : '',
-  )
+  const [compareA, setCompareA] = useState<string>('')
+  const [compareB, setCompareB] = useState<string>('')
   const [compareResult, setCompareResult] = useState<Record<string, unknown> | null>(null)
-  const [comparing, setComparing] = useState(false)
 
   // JSON inspector section
   const [jsonSection, setJsonSection] = useState<'snapshot' | 'archicad' | 'gis' | 'logs'>(
     'snapshot',
   )
 
-  // Project deletion state
-  const [deletingProject, setDeletingProject] = useState(false)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  // Queries
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects(50),
+    queryFn: () => fetchProjects(50),
+  })
+
+  const parcelsQuery = useQuery({
+    queryKey: queryKeys.parcels(50),
+    queryFn: () => fetchParcels(50),
+  })
+
+  const snapshotsQuery = useQuery({
+    queryKey: queryKeys.snapshots(projectId || undefined),
+    queryFn: () => fetchSnapshots(projectId || undefined, 50),
+    enabled: Boolean(projectId) || !projectsQuery.isLoading,
+  })
+
+  const projects = projectsQuery.data?.docs ?? []
+  const parcels = parcelsQuery.data?.docs ?? []
+  const snapshots = snapshotsQuery.data?.docs ?? []
+
+  useEffect(() => {
+    if (!projectId && projects.length > 0) {
+      setProjectId(String(projects[0].id))
+    }
+  }, [projectId, projects])
+
+  useEffect(() => {
+    if (parcels.length > 0 && !selectedParcelId && !mapPreview.label) {
+      const p = parcels[0]
+      setSelectedParcelId(String(p.id))
+      setMapPreview((prev) => ({
+        ...prev,
+        centroid: p.centroid,
+        geometry: p.geometry,
+        label: `${p.idu} (${p.surfaceM2 ?? '?'} m²)`,
+      }))
+    }
+  }, [parcels, selectedParcelId, mapPreview.label])
+
+  useEffect(() => {
+    if (snapshots.length === 0) {
+      setActiveSnapshot(null)
+      setCompareA('')
+      setCompareB('')
+      return
+    }
+    setActiveSnapshot((prev) => {
+      if (prev && snapshots.some((s) => String(s.id) === String(prev.id))) {
+        return prev
+      }
+      return snapshots[0]
+    })
+    setCompareA((prev) => prev || String(snapshots[0].id))
+    setCompareB((prev) => prev || String(snapshots[1]?.id ?? snapshots[0].id))
+  }, [snapshots])
 
   const currentProject = projects.find((p) => String(p.id) === projectId) || null
   const canDeleteProject = userRole !== 'viewer'
 
-  const handleParcelLookup = async () => {
-    setLookupLoading(true)
-    setStatusBanner(null)
-    try {
+  const handleTabChange = (nextTab: TabKey) => {
+    setActiveTab(nextTab)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', nextTab)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
+  const handleProjectChange = (nextProjectId: string) => {
+    setProjectId(nextProjectId)
+    setActiveSnapshot(null)
+    setCompareResult(null)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('projectId', nextProjectId)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
+  // Mutations
+  const parcelLookupMutation = useMutation({
+    mutationFn: async () => {
       const params = new URLSearchParams()
       if (idu.trim()) params.set('idu', idu.trim())
       else if (address.trim()) params.set('address', address.trim())
-
-      const res = await fetch(`/api/plu/parcel-lookup?${params.toString()}`)
-      const data = await res.json()
-      if (!res.ok) {
-        setStatusBanner({ type: 'err', text: data.error || 'Erreur lors de la localisation IGN' })
-        return
-      }
+      return apiFetch<{
+        parcel?: {
+          status: string
+          idu?: string
+          surfaceM2?: number
+          centroid?: { lng?: number | null; lat?: number | null }
+          geometry?: unknown
+        }
+        geocoding?: { coordinates?: { lng?: number | null; lat?: number | null }; label?: string }
+        gpu?: { zoneCode?: string }
+      }>(`/api/plu/parcel-lookup?${params.toString()}`)
+    },
+    onSuccess: (data) => {
       if (data.parcel?.status === 'ok') {
         setMapPreview({
           centroid: data.parcel.centroid,
@@ -250,20 +252,18 @@ export function WorkspaceClient({
       } else {
         setStatusBanner({ type: 'err', text: 'Aucune parcelle trouvée pour cette recherche.' })
       }
-    } catch {
-      setStatusBanner({ type: 'err', text: 'Erreur réseau lors de la requête IGN.' })
-    } finally {
-      setLookupLoading(false)
-    }
-  }
+    },
+    onError: (err) => {
+      setStatusBanner({
+        type: 'err',
+        text: err instanceof Error ? err.message : 'Erreur lors de la localisation IGN',
+      })
+    },
+  })
 
-  const handleRunAnalysis = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!projectId) return
-    setAnalyzing(true)
-    setStatusBanner(null)
-    try {
-      const res = await fetch('/api/plu/analyze', {
+  const runAnalysisMutation = useMutation({
+    mutationFn: () =>
+      apiFetch<{ snapshot: SnapshotRecord }>('/api/plu/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -273,88 +273,85 @@ export function WorkspaceClient({
           idu: idu.trim() || undefined,
           parcelId: !idu.trim() && selectedParcelId ? Number(selectedParcelId) : undefined,
         }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setStatusBanner({ type: 'err', text: data.error || "Échec de l'analyse PLU" })
-        return
-      }
-      const newSnap = data.snapshot as SnapshotRecord
-      setSnapshots((prev) => [newSnap, ...prev])
+      }),
+    onSuccess: async (data) => {
+      const newSnap = data.snapshot
       setActiveSnapshot(newSnap)
       setStatusBanner({
         type: 'ok',
         text: `Analyse enregistrée : ${newSnap.snapshotLabel} (historique immuable mis à jour).`,
       })
-      router.refresh()
-    } catch {
-      setStatusBanner({ type: 'err', text: "Erreur réseau lors de l'exécution du pipeline." })
-    } finally {
-      setAnalyzing(false)
-    }
-  }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['snapshots'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardStats }),
+      ])
+    },
+    onError: (err) => {
+      setStatusBanner({
+        type: 'err',
+        text: err instanceof Error ? err.message : "Échec de l'analyse PLU",
+      })
+    },
+  })
 
-  const handleReplay = async (snapshotId: number | string) => {
-    setReplayingId(snapshotId)
-    setStatusBanner(null)
-    try {
-      const res = await fetch('/api/plu/replay', {
+  const replayMutation = useMutation({
+    mutationFn: (snapshotId: number | string) =>
+      apiFetch<{ snapshot: SnapshotRecord }>('/api/plu/replay', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ snapshotId }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setStatusBanner({ type: 'err', text: data.error || 'Échec du replay' })
-        return
-      }
-      const newSnap = data.snapshot as SnapshotRecord
-      setSnapshots((prev) => [newSnap, ...prev])
+      }),
+    onSuccess: async (data) => {
+      const newSnap = data.snapshot
       setActiveSnapshot(newSnap)
       setStatusBanner({
         type: 'ok',
         text: `Replay terminé : nouveau snapshot ${newSnap.snapshotLabel} créé sans écraser l'historique.`,
       })
-      router.refresh()
-    } finally {
-      setReplayingId(null)
-    }
-  }
-
-  const handleCompare = async () => {
-    if (!compareA || !compareB) return
-    setComparing(true)
-    try {
-      const res = await fetch(`/api/plu/compare?snapshotA=${compareA}&snapshotB=${compareB}`)
-      const data = await res.json()
-      setCompareResult(data)
-    } finally {
-      setComparing(false)
-    }
-  }
-
-  const handleDeleteProject = async () => {
-    if (!currentProject) return
-    setDeletingProject(true)
-    setDeleteError(null)
-    try {
-      const res = await fetch(`/api/projects/${currentProject.id}`, {
-        method: 'DELETE',
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['snapshots'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardStats }),
+      ])
+    },
+    onError: (err) => {
+      setStatusBanner({
+        type: 'err',
+        text: err instanceof Error ? err.message : 'Échec du replay',
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setDeleteError(
-          data?.errors?.[0]?.message || 'Impossible de supprimer le projet (droits insuffisants).',
-        )
-        return
-      }
+    },
+  })
+
+  const compareMutation = useMutation({
+    mutationFn: () =>
+      apiFetch<Record<string, unknown>>(
+        `/api/plu/compare?snapshotA=${compareA}&snapshotB=${compareB}`,
+      ),
+    onSuccess: (data) => {
+      setCompareResult(data)
+    },
+  })
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: (id: number | string) =>
+      apiFetch(`/api/projects/${id}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['projects'] }),
+        queryClient.invalidateQueries({ queryKey: ['snapshots'] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardStats }),
+      ])
       router.push('/')
       router.refresh()
-    } catch {
-      setDeleteError('Erreur réseau lors de la suppression du projet.')
-    } finally {
-      setDeletingProject(false)
-    }
+    },
+  })
+
+  const handleRunAnalysis = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!projectId) return
+    setStatusBanner(null)
+    runAnalysisMutation.mutate()
   }
 
   const calc = (activeSnapshot?.constructibilityCalculations || {}) as Record<string, unknown>
@@ -371,7 +368,7 @@ export function WorkspaceClient({
             <div className="grid gap-4 lg:grid-cols-12">
               <div className="space-y-1.5 lg:col-span-3">
                 <Label htmlFor="ws-project">Projet</Label>
-                <Select value={projectId} onValueChange={setProjectId}>
+                <Select value={projectId} onValueChange={handleProjectChange}>
                   <SelectTrigger id="ws-project">
                     <SelectValue placeholder="Sélectionner un projet" />
                   </SelectTrigger>
@@ -410,11 +407,14 @@ export function WorkspaceClient({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={handleParcelLookup}
-                  disabled={lookupLoading}
+                  onClick={() => {
+                    setStatusBanner(null)
+                    parcelLookupMutation.mutate()
+                  }}
+                  disabled={parcelLookupMutation.isPending}
                   className="w-full"
                 >
-                  {lookupLoading ? (
+                  {parcelLookupMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Search className="h-4 w-4 text-primary" />
@@ -468,8 +468,12 @@ export function WorkspaceClient({
               </div>
 
               <div className="flex items-end lg:col-span-2">
-                <Button type="submit" disabled={analyzing} className="w-full">
-                  {analyzing ? (
+                <Button
+                  type="submit"
+                  disabled={runAnalysisMutation.isPending || !projectId}
+                  className="w-full"
+                >
+                  {runAnalysisMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Play className="h-4 w-4" />
@@ -723,55 +727,71 @@ export function WorkspaceClient({
         {/* TAB 3: Prompt History & Replay */}
         <TabsContent value="history">
           <div className="space-y-3">
-            {snapshots.map((snap) => (
-              <Card
-                key={snap.id}
-                className={activeSnapshot?.id === snap.id ? 'border-primary bg-primary/5' : ''}
-              >
-                <CardContent className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="default" className="rounded font-mono text-[11px]">
-                        v{snap.version}
-                      </Badge>
-                      <span className="text-sm font-bold text-foreground">
-                        {snap.snapshotLabel}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(snap.createdAt).toLocaleString('fr-FR')}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">{snap.originalPrompt}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setActiveSnapshot(snap)
-                        handleTabChange('constructibility')
-                      }}
-                    >
-                      Rouvrir
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => handleReplay(snap.id)}
-                      disabled={replayingId === snap.id}
-                    >
-                      {replayingId === snap.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <RotateCcw className="h-3.5 w-3.5" />
-                      )}
-                      Rejouer
-                    </Button>
-                  </div>
+            {snapshotsQuery.isLoading ? (
+              <Card>
+                <CardContent className="flex items-center justify-center gap-2 p-8 text-xs text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Chargement de l&apos;historique...
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              snapshots.map((snap) => {
+                const isReplaying =
+                  replayMutation.isPending && replayMutation.variables === snap.id
+                return (
+                  <Card
+                    key={snap.id}
+                    className={activeSnapshot?.id === snap.id ? 'border-primary bg-primary/5' : ''}
+                  >
+                    <CardContent className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="default" className="rounded font-mono text-[11px]">
+                            v{snap.version}
+                          </Badge>
+                          <span className="text-sm font-bold text-foreground">
+                            {snap.snapshotLabel}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(snap.createdAt).toLocaleString('fr-FR')}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{snap.originalPrompt}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setActiveSnapshot(snap)
+                            handleTabChange('constructibility')
+                          }}
+                        >
+                          Rouvrir
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            setStatusBanner(null)
+                            replayMutation.mutate(snap.id)
+                          }}
+                          disabled={isReplaying}
+                        >
+                          {isReplaying ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          )}
+                          Rejouer
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })
+            )}
           </div>
         </TabsContent>
 
@@ -813,10 +833,10 @@ export function WorkspaceClient({
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={handleCompare}
-                  disabled={comparing}
+                  onClick={() => compareMutation.mutate()}
+                  disabled={compareMutation.isPending || !compareA || !compareB}
                 >
-                  {comparing ? 'Comparaison...' : 'Comparer les versions'}
+                  {compareMutation.isPending ? 'Comparaison...' : 'Comparer les versions'}
                 </Button>
               </div>
 
@@ -946,10 +966,14 @@ export function WorkspaceClient({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {deleteError && (
+                  {deleteProjectMutation.isError && (
                     <Alert variant="destructive">
                       <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>{deleteError}</AlertDescription>
+                      <AlertDescription>
+                        {deleteProjectMutation.error instanceof Error
+                          ? deleteProjectMutation.error.message
+                          : 'Impossible de supprimer le projet.'}
+                      </AlertDescription>
                     </Alert>
                   )}
 
@@ -977,9 +1001,9 @@ export function WorkspaceClient({
                         <Button
                           type="button"
                           variant="destructive"
-                          disabled={!canDeleteProject || deletingProject}
+                          disabled={!canDeleteProject || deleteProjectMutation.isPending}
                         >
-                          {deletingProject ? (
+                          {deleteProjectMutation.isPending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <Trash2 className="h-4 w-4" />
@@ -998,7 +1022,9 @@ export function WorkspaceClient({
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleDeleteProject}>
+                          <AlertDialogAction
+                            onClick={() => deleteProjectMutation.mutate(currentProject.id)}
+                          >
                             Supprimer définitivement
                           </AlertDialogAction>
                         </AlertDialogFooter>

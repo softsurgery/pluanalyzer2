@@ -2,8 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Building2, FileText, FolderKanban, LogOut, MapPin, ShieldCheck } from 'lucide-react'
 import type { AuthUser } from '@/access/roles'
+import { apiFetch } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -12,11 +14,15 @@ import { ModeToggle } from '@/components/mode-toggle'
 export function Navbar({ user }: { user: AuthUser | null }) {
   const pathname = usePathname()
   const router = useRouter()
+  const queryClient = useQueryClient()
 
-  const handleLogout = async () => {
-    await fetch('/api/users/logout', { method: 'POST' })
-    router.refresh()
-  }
+  const logoutMutation = useMutation({
+    mutationFn: () => apiFetch('/api/users/logout', { method: 'POST' }),
+    onSuccess: () => {
+      queryClient.clear()
+      router.refresh()
+    },
+  })
 
   const navItems = [
     { href: '/', label: 'Projets', icon: FolderKanban },
@@ -93,7 +99,8 @@ export function Navbar({ user }: { user: AuthUser | null }) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={handleLogout}
+                  onClick={() => logoutMutation.mutate()}
+                  disabled={logoutMutation.isPending}
                   title="Déconnexion"
                   className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 >
