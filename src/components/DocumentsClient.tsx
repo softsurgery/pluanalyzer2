@@ -2,7 +2,20 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { FileText, Loader2, Sparkles, Upload } from 'lucide-react'
+import { FileText, Info, Loader2, Sparkles, Upload } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface DocumentItem {
   id: number | string
@@ -62,7 +75,7 @@ export function DocumentsClient({
         body: formData,
       })
       if (!res.ok) {
-        setMessage('Erreur lors de l\'upload vers Payload CMS.')
+        setMessage("Erreur lors de l'upload vers Payload CMS.")
         return
       }
       setTitle('')
@@ -81,7 +94,7 @@ export function DocumentsClient({
       const res = await fetch(`/api/plu/documents/${id}/extract`, { method: 'POST' })
       const data = await res.json()
       if (!res.ok) {
-        setMessage(data.error || 'Échec de l\'extraction PDF')
+        setMessage(data.error || "Échec de l'extraction PDF")
         return
       }
       setSelectedDoc(data.document)
@@ -95,154 +108,171 @@ export function DocumentsClient({
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Gestion des Documents PLU</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="text-2xl font-bold text-foreground">Gestion des Documents PLU</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Stockage Payload CMS, extraction de texte PDF & découpage automatique par articles
         </p>
       </div>
 
       {/* Upload Form */}
-      <form
-        onSubmit={handleUpload}
-        className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-2 lg:grid-cols-5"
-      >
-        <div className="lg:col-span-2">
-          <label className="mb-1 block text-xs font-semibold text-slate-600">Titre</label>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ex: Règlement Zone UA Aix-en-Provence"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-slate-600">Zone</label>
-          <input
-            value={zoneCode}
-            onChange={(e) => setZoneCode(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-slate-600">Code INSEE</label>
-          <input
-            value={codeInsee}
-            onChange={(e) => setCodeInsee(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-slate-600">Projet</label>
-          <select
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+      <Card>
+        <CardContent className="p-5">
+          <form onSubmit={handleUpload} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="space-y-1.5 lg:col-span-2">
+              <Label htmlFor="doc-title">Titre</Label>
+              <Input
+                id="doc-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Ex: Règlement Zone UA Aix-en-Provence"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="doc-zone">Zone</Label>
+              <Input
+                id="doc-zone"
+                value={zoneCode}
+                onChange={(e) => setZoneCode(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="doc-insee">Code INSEE</Label>
+              <Input
+                id="doc-insee"
+                value={codeInsee}
+                onChange={(e) => setCodeInsee(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="doc-project">Projet</Label>
+              <Select value={projectId} onValueChange={setProjectId}>
+                <SelectTrigger id="doc-project">
+                  <SelectValue placeholder="Sélectionner un projet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2 lg:col-span-5">
-          <input
-            type="file"
-            accept=".pdf,.txt"
-            required
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="text-xs text-slate-600"
-          />
-          <button
-            type="submit"
-            disabled={uploading || !file}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Téléverser dans Payload
-          </button>
-        </div>
-      </form>
+            <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2 lg:col-span-5">
+              <Input
+                type="file"
+                accept=".pdf,.txt"
+                required
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="max-w-sm cursor-pointer text-xs file:mr-3 file:rounded-md file:bg-secondary file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-secondary-foreground"
+              />
+              <Button type="submit" size="sm" disabled={uploading || !file}>
+                {uploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                Téléverser dans Payload
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
       {message && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-medium text-blue-800">
-          {message}
-        </div>
+        <Alert variant="info">
+          <Info className="h-4 w-4" />
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-600">
+          <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
             Documents ({documents.length})
           </h2>
           {documents.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs text-slate-500">
-              Aucun document téléversé pour le moment.
-            </div>
+            <Card className="border-dashed">
+              <CardContent className="p-8 text-center text-xs text-muted-foreground">
+                Aucun document téléversé pour le moment.
+              </CardContent>
+            </Card>
           ) : (
             documents.map((doc) => (
-              <div
+              <Card
                 key={doc.id}
                 onClick={() => setSelectedDoc(doc)}
-                className={`cursor-pointer rounded-xl border p-4 transition ${
+                className={`cursor-pointer transition ${
                   selectedDoc?.id === doc.id
-                    ? 'border-blue-500 bg-blue-50/40'
-                    : 'border-slate-200 bg-white hover:border-slate-300'
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:border-muted-foreground/40'
                 }`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    <FileText className="mt-0.5 h-5 w-5 text-blue-600" />
-                    <div>
-                      <div className="text-sm font-bold text-slate-900">{doc.title}</div>
-                      <div className="mt-0.5 text-xs text-slate-500">
-                        Zone {doc.zoneCode || '—'} · INSEE {doc.codeInsee || '—'} · Statut :{' '}
-                        <span className="font-semibold">{doc.extractionStatus || 'pending'}</span>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <FileText className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                      <div>
+                        <div className="text-sm font-bold text-foreground">{doc.title}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                          <span>Zone {doc.zoneCode || '—'}</span>
+                          <span>·</span>
+                          <span>INSEE {doc.codeInsee || '—'}</span>
+                          <span>·</span>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {doc.extractionStatus || 'pending'}
+                          </Badge>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleExtract(doc.id)
-                    }}
-                    disabled={extractingId === doc.id}
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    {extractingId === doc.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                    )}
-                    Extraire PDF
-                  </button>
-                </div>
-              </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleExtract(doc.id)
+                      }}
+                      disabled={extractingId === doc.id}
+                    >
+                      {extractingId === doc.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                      )}
+                      Extraire PDF
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             ))
           )}
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-slate-600">
-            Visionneuse de texte extrait
-          </h2>
-          {selectedDoc ? (
-            <div className="mt-3 space-y-2">
-              <div className="text-sm font-bold text-slate-900">{selectedDoc.title}</div>
-              <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-4 font-mono text-xs text-slate-100">
-                {selectedDoc.extractedText ||
-                  'Aucun texte extrait. Cliquez sur "Extraire PDF" pour lancer l\'analyse.'}
-              </pre>
-            </div>
-          ) : (
-            <p className="mt-4 text-xs text-slate-500">
-              Sélectionnez un document pour inspecter son contenu réglementaire.
-            </p>
-          )}
-        </div>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+              Visionneuse de texte extrait
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {selectedDoc ? (
+              <div className="space-y-2">
+                <div className="text-sm font-bold text-foreground">{selectedDoc.title}</div>
+                <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-4 font-mono text-xs text-slate-100">
+                  {selectedDoc.extractedText ||
+                    'Aucun texte extrait. Cliquez sur "Extraire PDF" pour lancer l\'analyse.'}
+                </pre>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Sélectionnez un document pour inspecter son contenu réglementaire.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  AlertCircle,
   AlertTriangle,
   CheckCircle2,
   Code2,
@@ -17,6 +18,28 @@ import {
   Search,
 } from 'lucide-react'
 import { ParcelMap } from './ParcelMap'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 export interface SnapshotRecord {
   id: number | string
@@ -60,6 +83,8 @@ interface WorkspaceClientProps {
 }
 
 type TabKey = 'constructibility' | 'regulations' | 'history' | 'compare' | 'json'
+
+const AUTO_PARCEL_VALUE = '__auto__'
 
 export function WorkspaceClient({
   projects,
@@ -195,7 +220,7 @@ export function WorkspaceClient({
       })
       const data = await res.json()
       if (!res.ok) {
-        setStatusBanner({ type: 'err', text: data.error || 'Échec de l\'analyse PLU' })
+        setStatusBanner({ type: 'err', text: data.error || "Échec de l'analyse PLU" })
         return
       }
       const newSnap = data.snapshot as SnapshotRecord
@@ -207,7 +232,7 @@ export function WorkspaceClient({
       })
       router.refresh()
     } catch {
-      setStatusBanner({ type: 'err', text: 'Erreur réseau lors de l\'exécution du pipeline.' })
+      setStatusBanner({ type: 'err', text: "Erreur réseau lors de l'exécution du pipeline." })
     } finally {
       setAnalyzing(false)
     }
@@ -260,510 +285,531 @@ export function WorkspaceClient({
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
       {/* Top Control Panel */}
-      <form
-        onSubmit={handleRunAnalysis}
-        className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-      >
-        <div className="grid gap-4 lg:grid-cols-12">
-          <div className="lg:col-span-3">
-            <label className="mb-1 block text-xs font-semibold text-slate-600">Projet</label>
-            <select
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.codeInsee})
-                </option>
-              ))}
-            </select>
-          </div>
+      <Card className="rounded-2xl">
+        <CardContent className="p-5">
+          <form onSubmit={handleRunAnalysis} className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-12">
+              <div className="space-y-1.5 lg:col-span-3">
+                <Label htmlFor="ws-project">Projet</Label>
+                <Select value={projectId} onValueChange={setProjectId}>
+                  <SelectTrigger id="ws-project">
+                    <SelectValue placeholder="Sélectionner un projet" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.name} ({p.codeInsee})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div className="lg:col-span-4">
-            <label className="mb-1 block text-xs font-semibold text-slate-600">
-              Adresse française (BAN / Géoplateforme)
-            </label>
-            <input
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Ex: 12 Avenue Sextius, Aix-en-Provence"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
+              <div className="space-y-1.5 lg:col-span-4">
+                <Label htmlFor="ws-address">Adresse française (BAN / Géoplateforme)</Label>
+                <Input
+                  id="ws-address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Ex: 12 Avenue Sextius, Aix-en-Provence"
+                />
+              </div>
 
-          <div className="lg:col-span-3">
-            <label className="mb-1 block text-xs font-semibold text-slate-600">
-              IDU Cadastral ou Parcelle enregistrée
-            </label>
-            <div className="flex gap-2">
-              <input
-                value={idu}
-                onChange={(e) => setIdu(e.target.value)}
-                placeholder="IDU (ex: 13001000AB0123)"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
-              />
+              <div className="space-y-1.5 lg:col-span-3">
+                <Label htmlFor="ws-idu">IDU Cadastral ou Parcelle enregistrée</Label>
+                <Input
+                  id="ws-idu"
+                  value={idu}
+                  onChange={(e) => setIdu(e.target.value)}
+                  placeholder="IDU (ex: 13001000AB0123)"
+                  className="font-mono"
+                />
+              </div>
+
+              <div className="flex items-end lg:col-span-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleParcelLookup}
+                  disabled={lookupLoading}
+                  className="w-full"
+                >
+                  {lookupLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4 text-primary" />
+                  )}
+                  Localiser IGN
+                </Button>
+              </div>
+
+              <div className="space-y-1.5 lg:col-span-3">
+                <Label htmlFor="ws-parcel">Ou parcelle en base</Label>
+                <Select
+                  value={selectedParcelId || AUTO_PARCEL_VALUE}
+                  onValueChange={(value) => {
+                    const nextId = value === AUTO_PARCEL_VALUE ? '' : value
+                    setSelectedParcelId(nextId)
+                    const found = parcels.find((p) => String(p.id) === nextId)
+                    if (found) {
+                      setMapPreview({
+                        centroid: found.centroid,
+                        geometry: found.geometry,
+                        label: `${found.idu} (${found.surfaceM2 ?? '?'} m²)`,
+                      })
+                    }
+                  }}
+                >
+                  <SelectTrigger id="ws-parcel" className="font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={AUTO_PARCEL_VALUE}>— Auto via recherche —</SelectItem>
+                    {parcels.map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.idu} ({p.surfaceM2 ?? '?'} m²)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5 lg:col-span-7">
+                <Label htmlFor="ws-prompt">
+                  Prompt d&apos;analyse de faisabilité (chaque envoi crée une nouvelle version
+                  immuable)
+                </Label>
+                <Input
+                  id="ws-prompt"
+                  required
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                />
+              </div>
+
+              <div className="flex items-end lg:col-span-2">
+                <Button type="submit" disabled={analyzing} className="w-full">
+                  {analyzing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                  Analyser PLU
+                </Button>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-end gap-2 lg:col-span-2">
-            <button
-              type="button"
-              onClick={handleParcelLookup}
-              disabled={lookupLoading}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-            >
-              {lookupLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Search className="h-4 w-4 text-blue-600" />
-              )}
-              Localiser IGN
-            </button>
-          </div>
-
-          <div className="lg:col-span-3">
-            <label className="mb-1 block text-xs font-semibold text-slate-600">
-              Ou parcelle en base
-            </label>
-            <select
-              value={selectedParcelId}
-              onChange={(e) => {
-                setSelectedParcelId(e.target.value)
-                const found = parcels.find((p) => String(p.id) === e.target.value)
-                if (found) {
-                  setMapPreview({
-                    centroid: found.centroid,
-                    geometry: found.geometry,
-                    label: `${found.idu} (${found.surfaceM2 ?? '?'} m²)`,
-                  })
-                }
-              }}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
-            >
-              <option value="">— Auto via recherche —</option>
-              {parcels.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.idu} ({p.surfaceM2 ?? '?'} m²)
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="lg:col-span-7">
-            <label className="mb-1 block text-xs font-semibold text-slate-600">
-              Prompt d&apos;analyse de faisabilité (chaque envoi crée une nouvelle version immuable)
-            </label>
-            <input
-              required
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="flex items-end lg:col-span-2">
-            <button
-              type="submit"
-              disabled={analyzing}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
-            >
-              {analyzing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              Analyser PLU
-            </button>
-          </div>
-        </div>
-
-        {statusBanner && (
-          <div
-            className={`mt-4 rounded-lg border px-4 py-2.5 text-xs font-medium ${
-              statusBanner.type === 'ok'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                : 'border-red-200 bg-red-50 text-red-800'
-            }`}
-          >
-            {statusBanner.text}
-          </div>
-        )}
-      </form>
+            {statusBanner && (
+              <Alert variant={statusBanner.type === 'ok' ? 'success' : 'destructive'}>
+                {statusBanner.type === 'ok' ? (
+                  <CheckCircle2 className="h-4 w-4" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                <AlertDescription>{statusBanner.text}</AlertDescription>
+              </Alert>
+            )}
+          </form>
+        </CardContent>
+      </Card>
 
       {/* Active Snapshot Header & Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {(
-            [
-              { id: 'constructibility', label: 'Constructibilité & Carte', icon: Layers },
-              { id: 'regulations', label: 'Réglementation & Validation', icon: FileText },
-              { id: 'history', label: `Historique (${snapshots.length})`, icon: History },
-              { id: 'compare', label: 'Comparaison', icon: GitCompare },
-              { id: 'json', label: 'Inspecteur JSON', icon: Code2 },
-            ] as const
-          ).map((t) => {
-            const Icon = t.icon
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setActiveTab(t.id)}
-                className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
-                  activeTab === t.id
-                    ? 'bg-slate-900 text-white'
-                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {t.label}
-              </button>
-            )
-          })}
-        </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList>
+            <TabsTrigger value="constructibility">
+              <Layers className="h-3.5 w-3.5" />
+              Constructibilité & Carte
+            </TabsTrigger>
+            <TabsTrigger value="regulations">
+              <FileText className="h-3.5 w-3.5" />
+              Réglementation & Validation
+            </TabsTrigger>
+            <TabsTrigger value="history">
+              <History className="h-3.5 w-3.5" />
+              Historique ({snapshots.length})
+            </TabsTrigger>
+            <TabsTrigger value="compare">
+              <GitCompare className="h-3.5 w-3.5" />
+              Comparaison
+            </TabsTrigger>
+            <TabsTrigger value="json">
+              <Code2 className="h-3.5 w-3.5" />
+              Inspecteur JSON
+            </TabsTrigger>
+          </TabsList>
 
-        {activeSnapshot && (
-          <div className="flex items-center gap-2">
-            <a
-              href={`/api/plu/export/${activeSnapshot.id}?format=archicad`}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <Download className="h-3.5 w-3.5 text-blue-600" />
-              Export Archicad
-            </a>
-            <a
-              href={`/api/plu/export/${activeSnapshot.id}?format=markdown`}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <Download className="h-3.5 w-3.5 text-emerald-600" />
-              Rapport MD
-            </a>
-          </div>
-        )}
-      </div>
-
-      {/* TAB 1: Constructibility & Map */}
-      {activeTab === 'constructibility' && (
-        <div className="grid gap-6 lg:grid-cols-12">
-          <div className="space-y-3 lg:col-span-5">
-            <ParcelMap
-              centroid={mapPreview.centroid}
-              geometry={mapPreview.geometry}
-              parcelLabel={mapPreview.label}
-              zoneCode={activeSnapshot?.zoneCode || mapPreview.zoneCode}
-            />
-            {activeSnapshot && (
-              <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs">
-                <div className="font-bold text-slate-900">{activeSnapshot.snapshotLabel}</div>
-                <div className="mt-1 text-slate-500">{activeSnapshot.originalPrompt}</div>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-4 lg:col-span-7">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {[
-                { label: 'Zone PLU', value: activeSnapshot?.zoneCode || 'Non identifiée' },
-                {
-                  label: 'Surface parcelle',
-                  value: calc.parcelSurfaceM2 ? `${calc.parcelSurfaceM2} m²` : 'N/A',
-                },
-                {
-                  label: 'Emprise au sol max',
-                  value: calc.maxFootprintM2 ? `${calc.maxFootprintM2} m²` : 'N/A',
-                },
-                {
-                  label: 'Emprise après reculs',
-                  value: calc.estimatedBuildableFootprintM2
-                    ? `${calc.estimatedBuildableFootprintM2} m²`
-                    : 'N/A',
-                },
-                {
-                  label: 'Hauteur max',
-                  value: calc.maxHeightM ? `${calc.maxHeightM} m` : 'N/A',
-                },
-                {
-                  label: 'Niveaux estimés',
-                  value: calc.estimatedStoreys ? `R+${Number(calc.estimatedStoreys) - 1}` : 'N/A',
-                },
-                {
-                  label: 'SDP max estimée',
-                  value: calc.maxFloorAreaSdpM2 ? `${calc.maxFloorAreaSdpM2} m²` : 'N/A',
-                },
-                {
-                  label: 'Volume max estimé',
-                  value: calc.maxVolumeM3 ? `${calc.maxVolumeM3} m³` : 'N/A',
-                },
-                {
-                  label: 'Pleine terre min',
-                  value: calc.minGreenSpaceM2 ? `${calc.minGreenSpaceM2} m²` : 'N/A',
-                },
-              ].map((kpi) => (
-                <div
-                  key={kpi.label}
-                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                >
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    {kpi.label}
-                  </div>
-                  <div className="mt-1 text-lg font-bold text-slate-900">{kpi.value}</div>
-                </div>
-              ))}
-            </div>
-
-            {interp.summary ? (
-              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Synthèse réglementaire
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-700">
-                  {String(interp.summary)}
-                </p>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: Regulations & Validation */}
-      {activeTab === 'regulations' && activeSnapshot && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900">Validation & Paramètres extraits</h3>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                {activeSnapshot.validationStatus === 'valid' ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                ) : (
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                )}
-                {activeSnapshot.validationStatus} ({String(valReport.completenessScore ?? 0)}%)
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {Object.entries(rules).map(([k, v]) => (
-                <div
-                  key={k}
-                  className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2"
-                >
-                  <span className="font-mono text-slate-600">{k}</span>
-                  <span className="font-bold text-slate-900">{v !== null ? String(v) : '—'}</span>
-                </div>
-              ))}
-            </div>
-
-            {Array.isArray(valReport.issues) && valReport.issues.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-xs font-bold text-slate-600">Alertes de validation</div>
-                {(valReport.issues as Array<{ severity: string; message: string }>).map(
-                  (issue, idx) => (
-                    <div
-                      key={idx}
-                      className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
-                    >
-                      <strong>[{issue.severity}]</strong> {issue.message}
-                    </div>
-                  ),
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900">
-              Articles PLU extraits ({activeSnapshot.extractedArticles?.length || 0})
-            </h3>
-            <div className="max-h-[420px] space-y-3 overflow-auto">
-              {(activeSnapshot.extractedArticles || []).map((art, i) => (
-                <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-xs font-bold text-blue-700">
-                    {art.articleNumber} — {art.title}
-                  </div>
-                  <p className="mt-1 whitespace-pre-wrap text-xs text-slate-700">{art.content}</p>
-                </div>
-              ))}
-              {(!activeSnapshot.extractedArticles ||
-                activeSnapshot.extractedArticles.length === 0) && (
-                <p className="text-xs text-slate-500">
-                  Aucun article officiel lié. Téléversez un règlement PLU dans &quot;Documents
-                  PLU&quot;.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: Prompt History & Replay */}
-      {activeTab === 'history' && (
-        <div className="space-y-3">
-          {snapshots.map((snap) => (
-            <div
-              key={snap.id}
-              className={`flex flex-col justify-between gap-3 rounded-xl border p-4 sm:flex-row sm:items-center ${
-                activeSnapshot?.id === snap.id
-                  ? 'border-blue-500 bg-blue-50/40'
-                  : 'border-slate-200 bg-white'
-              }`}
-            >
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="rounded bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-white">
-                    v{snap.version}
-                  </span>
-                  <span className="text-sm font-bold text-slate-900">{snap.snapshotLabel}</span>
-                  <span className="text-xs text-slate-400">
-                    {new Date(snap.createdAt).toLocaleString('fr-FR')}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-slate-600">{snap.originalPrompt}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveSnapshot(snap)
-                    setActiveTab('constructibility')
-                  }}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Rouvrir
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleReplay(snap.id)}
-                  disabled={replayingId === snap.id}
-                  className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {replayingId === snap.id ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  )}
-                  Rejouer
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* TAB 4: Historical Comparison */}
-      {activeTab === 'compare' && (
-        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-600">Snapshot A</label>
-              <select
-                value={compareA}
-                onChange={(e) => setCompareA(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-xs"
-              >
-                {snapshots.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.snapshotLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-600">Snapshot B</label>
-              <select
-                value={compareB}
-                onChange={(e) => setCompareB(e.target.value)}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-xs"
-              >
-                {snapshots.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.snapshotLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="button"
-              onClick={handleCompare}
-              disabled={comparing}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-            >
-              {comparing ? 'Comparaison...' : 'Comparer les versions'}
-            </button>
-          </div>
-
-          {compareResult && Array.isArray(compareResult.constructibilityDiff) && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500">
-                    <th className="py-2">Métrique</th>
-                    <th className="py-2">Snapshot A</th>
-                    <th className="py-2">Snapshot B</th>
-                    <th className="py-2">Delta</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(
-                    compareResult.constructibilityDiff as Array<{
-                      metric: string
-                      snapshotA: unknown
-                      snapshotB: unknown
-                      delta: number | null
-                    }>
-                  ).map((row) => (
-                    <tr key={row.metric} className="border-b border-slate-100">
-                      <td className="py-2 font-mono font-semibold">{row.metric}</td>
-                      <td className="py-2">{String(row.snapshotA ?? '—')}</td>
-                      <td className="py-2">{String(row.snapshotB ?? '—')}</td>
-                      <td className="py-2 font-semibold text-blue-600">
-                        {row.delta !== null ? (row.delta > 0 ? `+${row.delta}` : row.delta) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {activeSnapshot && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <a href={`/api/plu/export/${activeSnapshot.id}?format=archicad`}>
+                  <Download className="h-3.5 w-3.5 text-primary" />
+                  Export Archicad
+                </a>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <a href={`/api/plu/export/${activeSnapshot.id}?format=markdown`}>
+                  <Download className="h-3.5 w-3.5 text-emerald-600" />
+                  Rapport MD
+                </a>
+              </Button>
             </div>
           )}
         </div>
-      )}
 
-      {/* TAB 5: Payload JSON Inspector */}
-      {activeTab === 'json' && activeSnapshot && (
-        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex gap-2">
-            {(['snapshot', 'archicad', 'gis', 'logs'] as const).map((sec) => (
-              <button
-                key={sec}
-                type="button"
-                onClick={() => setJsonSection(sec)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                  jsonSection === sec
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
+        {/* TAB 1: Constructibility & Map */}
+        <TabsContent value="constructibility">
+          <div className="grid gap-6 lg:grid-cols-12">
+            <div className="space-y-3 lg:col-span-5">
+              <ParcelMap
+                centroid={mapPreview.centroid}
+                geometry={mapPreview.geometry}
+                parcelLabel={mapPreview.label}
+                zoneCode={activeSnapshot?.zoneCode || mapPreview.zoneCode}
+              />
+              {activeSnapshot && (
+                <Card>
+                  <CardHeader className="p-4 pb-1">
+                    <CardTitle className="text-xs font-bold">
+                      {activeSnapshot.snapshotLabel}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <p className="text-xs text-muted-foreground">{activeSnapshot.originalPrompt}</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            <div className="space-y-4 lg:col-span-7">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {[
+                  { label: 'Zone PLU', value: activeSnapshot?.zoneCode || 'Non identifiée' },
+                  {
+                    label: 'Surface parcelle',
+                    value: calc.parcelSurfaceM2 ? `${calc.parcelSurfaceM2} m²` : 'N/A',
+                  },
+                  {
+                    label: 'Emprise au sol max',
+                    value: calc.maxFootprintM2 ? `${calc.maxFootprintM2} m²` : 'N/A',
+                  },
+                  {
+                    label: 'Emprise après reculs',
+                    value: calc.estimatedBuildableFootprintM2
+                      ? `${calc.estimatedBuildableFootprintM2} m²`
+                      : 'N/A',
+                  },
+                  {
+                    label: 'Hauteur max',
+                    value: calc.maxHeightM ? `${calc.maxHeightM} m` : 'N/A',
+                  },
+                  {
+                    label: 'Niveaux estimés',
+                    value: calc.estimatedStoreys ? `R+${Number(calc.estimatedStoreys) - 1}` : 'N/A',
+                  },
+                  {
+                    label: 'SDP max estimée',
+                    value: calc.maxFloorAreaSdpM2 ? `${calc.maxFloorAreaSdpM2} m²` : 'N/A',
+                  },
+                  {
+                    label: 'Volume max estimé',
+                    value: calc.maxVolumeM3 ? `${calc.maxVolumeM3} m³` : 'N/A',
+                  },
+                  {
+                    label: 'Pleine terre min',
+                    value: calc.minGreenSpaceM2 ? `${calc.minGreenSpaceM2} m²` : 'N/A',
+                  },
+                ].map((kpi) => (
+                  <Card key={kpi.label}>
+                    <CardHeader className="p-4 pb-1">
+                      <CardDescription className="text-[11px] font-semibold uppercase tracking-wide">
+                        {kpi.label}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0">
+                      <div className="text-lg font-bold text-foreground">{kpi.value}</div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {interp.summary ? (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                      Synthèse réglementaire
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm leading-relaxed text-foreground/90">
+                      {String(interp.summary)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : null}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* TAB 2: Regulations & Validation */}
+        <TabsContent value="regulations">
+          {activeSnapshot && (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card>
+                <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
+                  <CardTitle className="text-sm font-bold">
+                    Validation & Paramètres extraits
+                  </CardTitle>
+                  <Badge variant={activeSnapshot.validationStatus === 'valid' ? 'success' : 'warning'}>
+                    {activeSnapshot.validationStatus === 'valid' ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                    )}
+                    {activeSnapshot.validationStatus} ({String(valReport.completenessScore ?? 0)}%)
+                  </Badge>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {Object.entries(rules).map(([k, v]) => (
+                      <div
+                        key={k}
+                        className="flex items-center justify-between rounded-lg bg-muted px-3 py-2"
+                      >
+                        <span className="font-mono text-muted-foreground">{k}</span>
+                        <span className="font-bold text-foreground">
+                          {v !== null ? String(v) : '—'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {Array.isArray(valReport.issues) && valReport.issues.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-xs font-bold text-muted-foreground">
+                        Alertes de validation
+                      </div>
+                      {(valReport.issues as Array<{ severity: string; message: string }>).map(
+                        (issue, idx) => (
+                          <Alert key={idx} variant="warning">
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertDescription>
+                              <strong>[{issue.severity}]</strong> {issue.message}
+                            </AlertDescription>
+                          </Alert>
+                        ),
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-bold">
+                    Articles PLU extraits ({activeSnapshot.extractedArticles?.length || 0})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-h-[420px] space-y-3 overflow-auto">
+                    {(activeSnapshot.extractedArticles || []).map((art, i) => (
+                      <div key={i} className="rounded-lg border bg-muted/50 p-3">
+                        <div className="text-xs font-bold text-primary">
+                          {art.articleNumber} — {art.title}
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-xs text-foreground/80">
+                          {art.content}
+                        </p>
+                      </div>
+                    ))}
+                    {(!activeSnapshot.extractedArticles ||
+                      activeSnapshot.extractedArticles.length === 0) && (
+                      <p className="text-xs text-muted-foreground">
+                        Aucun article officiel lié. Téléversez un règlement PLU dans &quot;Documents
+                        PLU&quot;.
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* TAB 3: Prompt History & Replay */}
+        <TabsContent value="history">
+          <div className="space-y-3">
+            {snapshots.map((snap) => (
+              <Card
+                key={snap.id}
+                className={activeSnapshot?.id === snap.id ? 'border-primary bg-primary/5' : ''}
               >
-                {sec.toUpperCase()}
-              </button>
+                <CardContent className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="default" className="rounded font-mono text-[11px]">
+                        v{snap.version}
+                      </Badge>
+                      <span className="text-sm font-bold text-foreground">
+                        {snap.snapshotLabel}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(snap.createdAt).toLocaleString('fr-FR')}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{snap.originalPrompt}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setActiveSnapshot(snap)
+                        setActiveTab('constructibility')
+                      }}
+                    >
+                      Rouvrir
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleReplay(snap.id)}
+                      disabled={replayingId === snap.id}
+                    >
+                      {replayingId === snap.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      )}
+                      Rejouer
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
-          <pre className="max-h-[500px] overflow-auto rounded-lg bg-slate-900 p-4 font-mono text-xs text-emerald-300">
-            {JSON.stringify(
-              jsonSection === 'snapshot'
-                ? activeSnapshot
-                : jsonSection === 'archicad'
-                  ? activeSnapshot.archicadExport
-                  : jsonSection === 'gis'
-                    ? activeSnapshot.zoningAndGis
-                    : {
-                        logs: activeSnapshot.executionLogs,
-                        errors: activeSnapshot.executionErrors,
-                      },
-              null,
-              2,
-            )}
-          </pre>
-        </div>
-      )}
+        </TabsContent>
+
+        {/* TAB 4: Historical Comparison */}
+        <TabsContent value="compare">
+          <Card>
+            <CardContent className="space-y-4 p-5">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-[220px] space-y-1.5">
+                  <Label htmlFor="compare-a">Snapshot A</Label>
+                  <Select value={compareA} onValueChange={setCompareA}>
+                    <SelectTrigger id="compare-a" className="text-xs">
+                      <SelectValue placeholder="Sélectionner Snapshot A" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {snapshots.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)} className="text-xs">
+                          {s.snapshotLabel}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-[220px] space-y-1.5">
+                  <Label htmlFor="compare-b">Snapshot B</Label>
+                  <Select value={compareB} onValueChange={setCompareB}>
+                    <SelectTrigger id="compare-b" className="text-xs">
+                      <SelectValue placeholder="Sélectionner Snapshot B" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {snapshots.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)} className="text-xs">
+                          {s.snapshotLabel}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleCompare}
+                  disabled={comparing}
+                >
+                  {comparing ? 'Comparaison...' : 'Comparer les versions'}
+                </Button>
+              </div>
+
+              {compareResult && Array.isArray(compareResult.constructibilityDiff) && (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Métrique</TableHead>
+                      <TableHead>Snapshot A</TableHead>
+                      <TableHead>Snapshot B</TableHead>
+                      <TableHead>Delta</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(
+                      compareResult.constructibilityDiff as Array<{
+                        metric: string
+                        snapshotA: unknown
+                        snapshotB: unknown
+                        delta: number | null
+                      }>
+                    ).map((row) => (
+                      <TableRow key={row.metric}>
+                        <TableCell className="font-mono font-semibold">{row.metric}</TableCell>
+                        <TableCell>{String(row.snapshotA ?? '—')}</TableCell>
+                        <TableCell>{String(row.snapshotB ?? '—')}</TableCell>
+                        <TableCell className="font-semibold text-primary">
+                          {row.delta !== null ? (row.delta > 0 ? `+${row.delta}` : row.delta) : '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* TAB 5: Payload JSON Inspector */}
+        <TabsContent value="json">
+          {activeSnapshot && (
+            <Card>
+              <CardContent className="space-y-3 p-5">
+                <div className="flex flex-wrap gap-2">
+                  {(['snapshot', 'archicad', 'gis', 'logs'] as const).map((sec) => (
+                    <Button
+                      key={sec}
+                      type="button"
+                      size="sm"
+                      variant={jsonSection === sec ? 'default' : 'secondary'}
+                      onClick={() => setJsonSection(sec)}
+                    >
+                      {sec.toUpperCase()}
+                    </Button>
+                  ))}
+                </div>
+                <pre className="max-h-[500px] overflow-auto rounded-lg bg-slate-900 p-4 font-mono text-xs text-emerald-300">
+                  {JSON.stringify(
+                    jsonSection === 'snapshot'
+                      ? activeSnapshot
+                      : jsonSection === 'archicad'
+                        ? activeSnapshot.archicadExport
+                        : jsonSection === 'gis'
+                          ? activeSnapshot.zoningAndGis
+                          : {
+                              logs: activeSnapshot.executionLogs,
+                              errors: activeSnapshot.executionErrors,
+                            },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

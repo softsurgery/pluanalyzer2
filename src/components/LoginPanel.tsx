@@ -2,7 +2,19 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, KeyRound, Loader2 } from 'lucide-react'
+import { AlertCircle, Building2, KeyRound, Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export function LoginPanel() {
   const router = useRouter()
@@ -35,68 +47,75 @@ export function LoginPanel() {
   }
 
   return (
-    <div className="mx-auto mt-12 max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-      <div className="mb-6 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white">
+    <Card className="mx-auto mt-12 max-w-md rounded-2xl">
+      <CardHeader className="flex-row items-center gap-3 space-y-0 pb-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <Building2 className="h-6 w-6" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Connexion PLU Analyzer</h1>
-          <p className="text-xs text-slate-500">Authentification sécurisée via Payload CMS</p>
+          <CardTitle className="text-xl">Connexion PLU Analyzer</CardTitle>
+          <CardDescription className="text-xs">
+            Authentification sécurisée via Payload CMS
+          </CardDescription>
         </div>
-      </div>
+      </CardHeader>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
-            Email
-          </label>
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">
-            Mot de passe
-          </label>
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
-        </div>
-
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-            {error}
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="login-email" className="uppercase tracking-wide">
+              Email
+            </Label>
+            <Input
+              id="login-email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
-        )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
-          Se connecter
-        </button>
-      </form>
+          <div className="space-y-1.5">
+            <Label htmlFor="login-password" className="uppercase tracking-wide">
+              Mot de passe
+            </Label>
+            <Input
+              id="login-password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
 
-      <div className="mt-6 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-        <div className="font-semibold text-slate-700">Comptes de démonstration (seed) :</div>
-        <div className="mt-1 space-y-0.5 font-mono text-[11px]">
-          <div>Urbaniste : planner@pluanalyzer.fr / PluPlanner2026!</div>
-          <div>Admin : admin@pluanalyzer.fr / PluAdmin2026!</div>
-          <div>Viewer : viewer@pluanalyzer.fr / PluViewer2026!</div>
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <Button type="submit" disabled={loading} className="w-full">
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <KeyRound className="h-4 w-4" />
+            )}
+            Se connecter
+          </Button>
+        </form>
+      </CardContent>
+
+      <CardFooter>
+        <div className="w-full rounded-xl bg-muted p-3 text-xs text-muted-foreground">
+          <div className="font-semibold text-foreground">Comptes de démonstration (seed) :</div>
+          <div className="mt-1 space-y-0.5 font-mono text-[11px]">
+            <div>Urbaniste : planner@pluanalyzer.fr / PluPlanner2026!</div>
+            <div>Admin : admin@pluanalyzer.fr / PluAdmin2026!</div>
+            <div>Viewer : viewer@pluanalyzer.fr / PluViewer2026!</div>
+          </div>
         </div>
-      </div>
-    </div>
+      </CardFooter>
+    </Card>
   )
 }
