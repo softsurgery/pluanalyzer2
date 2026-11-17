@@ -27,6 +27,8 @@ export interface RunAnalysisInput {
   codeInsee?: string
   section?: string
   numero?: string
+  lat?: number
+  lng?: number
   replayedFromSnapshotId?: number | string
 }
 
@@ -110,7 +112,15 @@ export async function runPluAnalysisPipeline(
     let geocodingResult = null
     let targetPoint: GeoPoint | undefined
 
-    if (input.address && input.address.trim()) {
+    if (typeof input.lat === 'number' && typeof input.lng === 'number') {
+      targetPoint = { lat: input.lat, lng: input.lng }
+      logStep(
+        'geocoding',
+        'ok',
+        geoStart,
+        `Map coordinates: ${input.lat.toFixed(5)}, ${input.lng.toFixed(5)}`,
+      )
+    } else if (input.address && input.address.trim()) {
       geocodingResult = await geocodeFrenchAddress(input.address)
       if (geocodingResult.status === 'ok' && geocodingResult.coordinates) {
         targetPoint = geocodingResult.coordinates

@@ -29,7 +29,11 @@ import { deleteProject, fetchProjects, projectKeys } from "@/api/projects";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AnalysisTab } from "./workspace/AnalysisTab";
+import {
+  AnalysisTab,
+  type LocationInputMode,
+} from "./workspace/AnalysisTab";
+import type { MarkerCoordinates } from "./MarkerPicker";
 import { CompareTab } from "./workspace/CompareTab";
 import {
   ConstructibilityTab,
@@ -92,9 +96,13 @@ export function WorkspaceClient({
   );
 
   // Form state
+  const [locationMode, setLocationMode] =
+    useState<LocationInputMode>("address");
   const [address, setAddress] = useState("12 Avenue Sextius, Aix-en-Provence");
   const [idu, setIdu] = useState("");
   const [selectedParcelId, setSelectedParcelId] = useState<string>("");
+  const [pickedLocation, setPickedLocation] =
+    useState<MarkerCoordinates | null>(null);
   const [prompt, setPrompt] = useState(
     "Analyser la constructibilité maximale (emprise, hauteur, SDP, stationnement) pour un bâtiment mixte R+3.",
   );
@@ -193,7 +201,18 @@ export function WorkspaceClient({
 
   // Mutations
   const parcelLookupMutation = useMutation({
-    mutationFn: () => lookupParcel({ idu, address }),
+    mutationFn: () => {
+      if (locationMode === "map" && pickedLocation) {
+        return lookupParcel({
+          lat: pickedLocation.lat,
+          lng: pickedLocation.lng,
+        });
+      }
+      if (locationMode === "parcel") {
+        return lookupParcel({ idu });
+      }
+      return lookupParcel({ address });
+    },
     onSuccess: (data) => {
       if (data.parcel?.status === "ok") {
         setMapPreview({
@@ -236,17 +255,33 @@ export function WorkspaceClient({
   });
 
   const runAnalysisMutation = useMutation({
-    mutationFn: () =>
-      runAnalysis({
+    mutationFn: () => {
+      const base = {
         projectId: Number(projectId),
         prompt,
+      };
+      if (locationMode === "map" && pickedLocation) {
+        return runAnalysis({
+          ...base,
+          lat: pickedLocation.lat,
+          lng: pickedLocation.lng,
+        });
+      }
+      if (locationMode === "parcel") {
+        return runAnalysis({
+          ...base,
+          idu: idu.trim() || undefined,
+          parcelId:
+            !idu.trim() && selectedParcelId
+              ? Number(selectedParcelId)
+              : undefined,
+        });
+      }
+      return runAnalysis({
+        ...base,
         address: address.trim() || undefined,
-        idu: idu.trim() || undefined,
-        parcelId:
-          !idu.trim() && selectedParcelId
-            ? Number(selectedParcelId)
-            : undefined,
-      }),
+      });
+    },
     onSuccess: async (data) => {
       const newSnap = data.snapshot;
       setActiveSnapshot(newSnap);
@@ -394,7 +429,10 @@ export function WorkspaceClient({
             projects={projects}
             parcels={parcels}
             projectId={projectId}
+            hideProjectSelect={Boolean(initialProjectId)}
             onProjectChange={handleProjectChange}
+            locationMode={locationMode}
+            onLocationModeChange={setLocationMode}
             address={address}
             onAddressChange={setAddress}
             idu={idu}
@@ -409,6 +447,15 @@ export function WorkspaceClient({
                   label: `${found.idu} (${found.surfaceM2 ?? "?"} m²)`,
                 });
               }
+            }}
+            pickedLocation={pickedLocation}
+            onPickedLocationChange={(coords) => {
+              setPickedLocation(coords);
+              setMapPreview((prev) => ({
+                ...prev,
+                centroid: coords,
+                label: `Point (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})`,
+              }));
             }}
             prompt={prompt}
             onPromptChange={setPrompt}

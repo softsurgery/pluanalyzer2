@@ -25,4 +25,6 @@ export interface RunAnalysisInput {
   address?: string
   idu?: string
   parcelId?: number
+  lat?: number
+  lng?: number
 }

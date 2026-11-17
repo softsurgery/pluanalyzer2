@@ -17,11 +17,21 @@ export async function GET(request: Request) {
     const codeInsee = searchParams.get('codeInsee')
     const section = searchParams.get('section')
     const numero = searchParams.get('numero')
+    const latParam = searchParams.get('lat')
+    const lngParam = searchParams.get('lng')
 
     let geocoding = null
     let point = undefined
 
-    if (address) {
+    if (latParam !== null && lngParam !== null) {
+      const lat = Number(latParam)
+      const lng = Number(lngParam)
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        point = { lat, lng }
+      }
+    }
+
+    if (!point && address) {
       geocoding = await geocodeFrenchAddress(address)
       if (geocoding.status === 'ok' && geocoding.coordinates) {
         point = geocoding.coordinates

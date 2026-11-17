@@ -13,6 +13,8 @@ const AnalyzeRequestSchema = z.object({
   codeInsee: z.string().optional(),
   section: z.string().optional(),
   numero: z.string().optional(),
+  lat: z.number().optional(),
+  lng: z.number().optional(),
 })
 
 export async function POST(request: Request) {
