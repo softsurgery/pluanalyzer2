@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   AlertTriangle,
@@ -19,17 +19,23 @@ import {
   Search,
   Settings,
   Trash2,
-} from 'lucide-react'
-import { ParcelMap } from './ParcelMap'
+} from "lucide-react";
+import { ParcelMap } from "./ParcelMap";
+import type { SnapshotRecord } from "@/types/analyses";
+import type { ParcelRecord } from "@/types/parcels";
 import {
-  apiFetch,
-  fetchParcels,
-  fetchProjects,
+  analysisKeys,
+  compareSnapshots,
   fetchSnapshots,
-  type ParcelRecord,
-  queryKeys,
-  type SnapshotRecord,
-} from '@/lib/api'
+  replaySnapshot,
+  runAnalysis,
+} from "@/api/analyses";
+import {
+  fetchParcels,
+  lookupParcel,
+  parcelKeys,
+} from "@/api/parcels";
+import { deleteProject, fetchProjects, projectKeys } from "@/api/projects";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,21 +46,27 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Table,
   TableBody,
@@ -62,302 +74,307 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from "@/components/ui/table";
 
-export type { ParcelRecord, SnapshotRecord }
+export type { ParcelRecord, SnapshotRecord };
 
 interface WorkspaceClientProps {
-  initialProjectId?: string
-  initialTab?: string
-  userRole?: string
+  initialProjectId?: string;
+  initialTab?: string;
+  userRole?: string;
 }
 
-type TabKey = 'constructibility' | 'regulations' | 'history' | 'compare' | 'json' | 'settings'
+type TabKey =
+  | "constructibility"
+  | "regulations"
+  | "history"
+  | "compare"
+  | "json"
+  | "settings";
 
 const VALID_TABS: readonly TabKey[] = [
-  'constructibility',
-  'regulations',
-  'history',
-  'compare',
-  'json',
-  'settings',
-]
+  "constructibility",
+  "regulations",
+  "history",
+  "compare",
+  "json",
+  "settings",
+];
 
 function resolveTabKey(tab?: string): TabKey {
-  return VALID_TABS.includes(tab as TabKey) ? (tab as TabKey) : 'constructibility'
+  return VALID_TABS.includes(tab as TabKey)
+    ? (tab as TabKey)
+    : "constructibility";
 }
 
-const AUTO_PARCEL_VALUE = '__auto__'
+const AUTO_PARCEL_VALUE = "__auto__";
 
 export function WorkspaceClient({
   initialProjectId,
   initialTab,
   userRole,
 }: WorkspaceClientProps) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const queryClient = useQueryClient()
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<TabKey>(() => resolveTabKey(initialTab))
-  const [projectId, setProjectId] = useState<string>(initialProjectId || '')
-  const [activeSnapshot, setActiveSnapshot] = useState<SnapshotRecord | null>(null)
+  const [activeTab, setActiveTab] = useState<TabKey>(() =>
+    resolveTabKey(initialTab),
+  );
+  const [projectId, setProjectId] = useState<string>(initialProjectId || "");
+  const [activeSnapshot, setActiveSnapshot] = useState<SnapshotRecord | null>(
+    null,
+  );
 
   // Form state
-  const [address, setAddress] = useState('12 Avenue Sextius, Aix-en-Provence')
-  const [idu, setIdu] = useState('')
-  const [selectedParcelId, setSelectedParcelId] = useState<string>('')
+  const [address, setAddress] = useState("12 Avenue Sextius, Aix-en-Provence");
+  const [idu, setIdu] = useState("");
+  const [selectedParcelId, setSelectedParcelId] = useState<string>("");
   const [prompt, setPrompt] = useState(
-    'Analyser la constructibilité maximale (emprise, hauteur, SDP, stationnement) pour un bâtiment mixte R+3.',
-  )
-  const [statusBanner, setStatusBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(
-    null,
-  )
+    "Analyser la constructibilité maximale (emprise, hauteur, SDP, stationnement) pour un bâtiment mixte R+3.",
+  );
+  const [statusBanner, setStatusBanner] = useState<{
+    type: "ok" | "err";
+    text: string;
+  } | null>(null);
 
   // Map preview state
   const [mapPreview, setMapPreview] = useState<{
-    centroid?: { lng?: number | null; lat?: number | null } | null
-    geometry?: unknown
-    label?: string
-    zoneCode?: string
-  }>({})
+    centroid?: { lng?: number | null; lat?: number | null } | null;
+    geometry?: unknown;
+    label?: string;
+    zoneCode?: string;
+  }>({});
 
   // Comparison state
-  const [compareA, setCompareA] = useState<string>('')
-  const [compareB, setCompareB] = useState<string>('')
-  const [compareResult, setCompareResult] = useState<Record<string, unknown> | null>(null)
+  const [compareA, setCompareA] = useState<string>("");
+  const [compareB, setCompareB] = useState<string>("");
+  const [compareResult, setCompareResult] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
   // JSON inspector section
-  const [jsonSection, setJsonSection] = useState<'snapshot' | 'archicad' | 'gis' | 'logs'>(
-    'snapshot',
-  )
+  const [jsonSection, setJsonSection] = useState<
+    "snapshot" | "archicad" | "gis" | "logs"
+  >("snapshot");
 
   // Queries
   const projectsQuery = useQuery({
-    queryKey: queryKeys.projects(50),
+    queryKey: projectKeys.list(50),
     queryFn: () => fetchProjects(50),
-  })
+  });
 
   const parcelsQuery = useQuery({
-    queryKey: queryKeys.parcels(50),
+    queryKey: parcelKeys.list(50),
     queryFn: () => fetchParcels(50),
-  })
+  });
 
   const snapshotsQuery = useQuery({
-    queryKey: queryKeys.snapshots(projectId || undefined),
+    queryKey: analysisKeys.snapshots(projectId || undefined),
     queryFn: () => fetchSnapshots(projectId || undefined, 50),
     enabled: Boolean(projectId) || !projectsQuery.isLoading,
-  })
+  });
 
-  const projects = projectsQuery.data?.docs ?? []
-  const parcels = parcelsQuery.data?.docs ?? []
-  const snapshots = snapshotsQuery.data?.docs ?? []
+  const projects = projectsQuery.data?.docs ?? [];
+  const parcels = parcelsQuery.data?.docs ?? [];
+  const snapshots = snapshotsQuery.data?.docs ?? [];
 
   useEffect(() => {
     if (!projectId && projects.length > 0) {
-      setProjectId(String(projects[0].id))
+      setProjectId(String(projects[0].id));
     }
-  }, [projectId, projects])
+  }, [projectId, projects]);
 
   useEffect(() => {
     if (parcels.length > 0 && !selectedParcelId && !mapPreview.label) {
-      const p = parcels[0]
-      setSelectedParcelId(String(p.id))
+      const p = parcels[0];
+      setSelectedParcelId(String(p.id));
       setMapPreview((prev) => ({
         ...prev,
         centroid: p.centroid,
         geometry: p.geometry,
-        label: `${p.idu} (${p.surfaceM2 ?? '?'} m²)`,
-      }))
+        label: `${p.idu} (${p.surfaceM2 ?? "?"} m²)`,
+      }));
     }
-  }, [parcels, selectedParcelId, mapPreview.label])
+  }, [parcels, selectedParcelId, mapPreview.label]);
 
   useEffect(() => {
     if (snapshots.length === 0) {
-      setActiveSnapshot(null)
-      setCompareA('')
-      setCompareB('')
-      return
+      setActiveSnapshot(null);
+      setCompareA("");
+      setCompareB("");
+      return;
     }
     setActiveSnapshot((prev) => {
       if (prev && snapshots.some((s) => String(s.id) === String(prev.id))) {
-        return prev
+        return prev;
       }
-      return snapshots[0]
-    })
-    setCompareA((prev) => prev || String(snapshots[0].id))
-    setCompareB((prev) => prev || String(snapshots[1]?.id ?? snapshots[0].id))
-  }, [snapshots])
+      return snapshots[0];
+    });
+    setCompareA((prev) => prev || String(snapshots[0].id));
+    setCompareB((prev) => prev || String(snapshots[1]?.id ?? snapshots[0].id));
+  }, [snapshots]);
 
-  const currentProject = projects.find((p) => String(p.id) === projectId) || null
-  const canDeleteProject = userRole !== 'viewer'
+  const currentProject =
+    projects.find((p) => String(p.id) === projectId) || null;
+  const canDeleteProject = userRole !== "viewer";
 
   const handleTabChange = (nextTab: TabKey) => {
-    setActiveTab(nextTab)
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('tab', nextTab)
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-  }
+    setActiveTab(nextTab);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", nextTab);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
 
   const handleProjectChange = (nextProjectId: string) => {
-    setProjectId(nextProjectId)
-    setActiveSnapshot(null)
-    setCompareResult(null)
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('projectId', nextProjectId)
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-  }
+    setProjectId(nextProjectId);
+    setActiveSnapshot(null);
+    setCompareResult(null);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("projectId", nextProjectId);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
 
   // Mutations
   const parcelLookupMutation = useMutation({
-    mutationFn: async () => {
-      const params = new URLSearchParams()
-      if (idu.trim()) params.set('idu', idu.trim())
-      else if (address.trim()) params.set('address', address.trim())
-      return apiFetch<{
-        parcel?: {
-          status: string
-          idu?: string
-          surfaceM2?: number
-          centroid?: { lng?: number | null; lat?: number | null }
-          geometry?: unknown
-        }
-        geocoding?: { coordinates?: { lng?: number | null; lat?: number | null }; label?: string }
-        gpu?: { zoneCode?: string }
-      }>(`/api/plu/parcel-lookup?${params.toString()}`)
-    },
+    mutationFn: () => lookupParcel({ idu, address }),
     onSuccess: (data) => {
-      if (data.parcel?.status === 'ok') {
+      if (data.parcel?.status === "ok") {
         setMapPreview({
           centroid: data.parcel.centroid,
           geometry: data.parcel.geometry,
-          label: `${data.parcel.idu} (${data.parcel.surfaceM2 ?? '?'} m²)`,
+          label: `${data.parcel.idu} (${data.parcel.surfaceM2 ?? "?"} m²)`,
           zoneCode: data.gpu?.zoneCode,
-        })
-        if (data.parcel.idu) setIdu(data.parcel.idu)
+        });
+        if (data.parcel.idu) setIdu(data.parcel.idu);
         setStatusBanner({
-          type: 'ok',
-          text: `Parcelle localisée : ${data.parcel.idu} · Surface ${data.parcel.surfaceM2 ?? '?'} m² · Zone GPU : ${data.gpu?.zoneCode || 'non détectée'}`,
-        })
+          type: "ok",
+          text: `Parcelle localisée : ${data.parcel.idu} · Surface ${data.parcel.surfaceM2 ?? "?"} m² · Zone GPU : ${data.gpu?.zoneCode || "non détectée"}`,
+        });
       } else if (data.geocoding?.coordinates) {
         setMapPreview({
           centroid: data.geocoding.coordinates,
           label: data.geocoding.label,
           zoneCode: data.gpu?.zoneCode,
-        })
+        });
         setStatusBanner({
-          type: 'ok',
+          type: "ok",
           text: `Adresse géocodée (${data.geocoding.label}), parcelle cadastrale non retournée par IGN.`,
-        })
+        });
       } else {
-        setStatusBanner({ type: 'err', text: 'Aucune parcelle trouvée pour cette recherche.' })
+        setStatusBanner({
+          type: "err",
+          text: "Aucune parcelle trouvée pour cette recherche.",
+        });
       }
     },
     onError: (err) => {
       setStatusBanner({
-        type: 'err',
-        text: err instanceof Error ? err.message : 'Erreur lors de la localisation IGN',
-      })
+        type: "err",
+        text:
+          err instanceof Error
+            ? err.message
+            : "Erreur lors de la localisation IGN",
+      });
     },
-  })
+  });
 
   const runAnalysisMutation = useMutation({
     mutationFn: () =>
-      apiFetch<{ snapshot: SnapshotRecord }>('/api/plu/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: Number(projectId),
-          prompt,
-          address: address.trim() || undefined,
-          idu: idu.trim() || undefined,
-          parcelId: !idu.trim() && selectedParcelId ? Number(selectedParcelId) : undefined,
-        }),
+      runAnalysis({
+        projectId: Number(projectId),
+        prompt,
+        address: address.trim() || undefined,
+        idu: idu.trim() || undefined,
+        parcelId:
+          !idu.trim() && selectedParcelId
+            ? Number(selectedParcelId)
+            : undefined,
       }),
     onSuccess: async (data) => {
-      const newSnap = data.snapshot
-      setActiveSnapshot(newSnap)
+      const newSnap = data.snapshot;
+      setActiveSnapshot(newSnap);
       setStatusBanner({
-        type: 'ok',
+        type: "ok",
         text: `Analyse enregistrée : ${newSnap.snapshotLabel} (historique immuable mis à jour).`,
-      })
+      });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['snapshots'] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardStats }),
-      ])
+        queryClient.invalidateQueries({ queryKey: analysisKeys.all }),
+        queryClient.invalidateQueries({ queryKey: projectKeys.stats }),
+      ]);
     },
     onError: (err) => {
       setStatusBanner({
-        type: 'err',
+        type: "err",
         text: err instanceof Error ? err.message : "Échec de l'analyse PLU",
-      })
+      });
     },
-  })
+  });
 
   const replayMutation = useMutation({
-    mutationFn: (snapshotId: number | string) =>
-      apiFetch<{ snapshot: SnapshotRecord }>('/api/plu/replay', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ snapshotId }),
-      }),
+    mutationFn: (snapshotId: number | string) => replaySnapshot(snapshotId),
     onSuccess: async (data) => {
-      const newSnap = data.snapshot
-      setActiveSnapshot(newSnap)
+      const newSnap = data.snapshot;
+      setActiveSnapshot(newSnap);
       setStatusBanner({
-        type: 'ok',
+        type: "ok",
         text: `Replay terminé : nouveau snapshot ${newSnap.snapshotLabel} créé sans écraser l'historique.`,
-      })
+      });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['snapshots'] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardStats }),
-      ])
+        queryClient.invalidateQueries({ queryKey: analysisKeys.all }),
+        queryClient.invalidateQueries({ queryKey: projectKeys.stats }),
+      ]);
     },
     onError: (err) => {
       setStatusBanner({
-        type: 'err',
-        text: err instanceof Error ? err.message : 'Échec du replay',
-      })
+        type: "err",
+        text: err instanceof Error ? err.message : "Échec du replay",
+      });
     },
-  })
+  });
 
   const compareMutation = useMutation({
-    mutationFn: () =>
-      apiFetch<Record<string, unknown>>(
-        `/api/plu/compare?snapshotA=${compareA}&snapshotB=${compareB}`,
-      ),
+    mutationFn: () => compareSnapshots(compareA, compareB),
     onSuccess: (data) => {
-      setCompareResult(data)
+      setCompareResult(data);
     },
-  })
+  });
 
   const deleteProjectMutation = useMutation({
-    mutationFn: (id: number | string) =>
-      apiFetch(`/api/projects/${id}`, {
-        method: 'DELETE',
-      }),
+    mutationFn: (id: number | string) => deleteProject(id),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['projects'] }),
-        queryClient.invalidateQueries({ queryKey: ['snapshots'] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardStats }),
-      ])
-      router.push('/')
-      router.refresh()
+        queryClient.invalidateQueries({ queryKey: projectKeys.all }),
+        queryClient.invalidateQueries({ queryKey: analysisKeys.all }),
+        queryClient.invalidateQueries({ queryKey: projectKeys.stats }),
+      ]);
+      router.push("/");
+      router.refresh();
     },
-  })
+  });
 
   const handleRunAnalysis = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!projectId) return
-    setStatusBanner(null)
-    runAnalysisMutation.mutate()
-  }
+    e.preventDefault();
+    if (!projectId) return;
+    setStatusBanner(null);
+    runAnalysisMutation.mutate();
+  };
 
-  const calc = (activeSnapshot?.constructibilityCalculations || {}) as Record<string, unknown>
-  const interp = (activeSnapshot?.regulatoryInterpretation || {}) as Record<string, unknown>
-  const rules = (interp.rules || {}) as Record<string, unknown>
-  const valReport = (activeSnapshot?.validationReport || {}) as Record<string, unknown>
+  const calc = (activeSnapshot?.constructibilityCalculations || {}) as Record<
+    string,
+    unknown
+  >;
+  const interp = (activeSnapshot?.regulatoryInterpretation || {}) as Record<
+    string,
+    unknown
+  >;
+  const rules = (interp.rules || {}) as Record<string, unknown>;
+  const valReport = (activeSnapshot?.validationReport || {}) as Record<
+    string,
+    unknown
+  >;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
@@ -383,7 +400,9 @@ export function WorkspaceClient({
               </div>
 
               <div className="space-y-1.5 lg:col-span-4">
-                <Label htmlFor="ws-address">Adresse française (BAN / Géoplateforme)</Label>
+                <Label htmlFor="ws-address">
+                  Adresse française (BAN / Géoplateforme)
+                </Label>
                 <Input
                   id="ws-address"
                   value={address}
@@ -393,7 +412,9 @@ export function WorkspaceClient({
               </div>
 
               <div className="space-y-1.5 lg:col-span-3">
-                <Label htmlFor="ws-idu">IDU Cadastral ou Parcelle enregistrée</Label>
+                <Label htmlFor="ws-idu">
+                  IDU Cadastral ou Parcelle enregistrée
+                </Label>
                 <Input
                   id="ws-idu"
                   value={idu}
@@ -408,8 +429,8 @@ export function WorkspaceClient({
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setStatusBanner(null)
-                    parcelLookupMutation.mutate()
+                    setStatusBanner(null);
+                    parcelLookupMutation.mutate();
                   }}
                   disabled={parcelLookupMutation.isPending}
                   className="w-full"
@@ -428,15 +449,15 @@ export function WorkspaceClient({
                 <Select
                   value={selectedParcelId || AUTO_PARCEL_VALUE}
                   onValueChange={(value) => {
-                    const nextId = value === AUTO_PARCEL_VALUE ? '' : value
-                    setSelectedParcelId(nextId)
-                    const found = parcels.find((p) => String(p.id) === nextId)
+                    const nextId = value === AUTO_PARCEL_VALUE ? "" : value;
+                    setSelectedParcelId(nextId);
+                    const found = parcels.find((p) => String(p.id) === nextId);
                     if (found) {
                       setMapPreview({
                         centroid: found.centroid,
                         geometry: found.geometry,
-                        label: `${found.idu} (${found.surfaceM2 ?? '?'} m²)`,
-                      })
+                        label: `${found.idu} (${found.surfaceM2 ?? "?"} m²)`,
+                      });
                     }
                   }}
                 >
@@ -444,10 +465,12 @@ export function WorkspaceClient({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={AUTO_PARCEL_VALUE}>— Auto via recherche —</SelectItem>
+                    <SelectItem value={AUTO_PARCEL_VALUE}>
+                      — Auto via recherche —
+                    </SelectItem>
                     {parcels.map((p) => (
                       <SelectItem key={p.id} value={String(p.id)}>
-                        {p.idu} ({p.surfaceM2 ?? '?'} m²)
+                        {p.idu} ({p.surfaceM2 ?? "?"} m²)
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -456,8 +479,8 @@ export function WorkspaceClient({
 
               <div className="space-y-1.5 lg:col-span-7">
                 <Label htmlFor="ws-prompt">
-                  Prompt d&apos;analyse de faisabilité (chaque envoi crée une nouvelle version
-                  immuable)
+                  Prompt d&apos;analyse de faisabilité (chaque envoi crée une
+                  nouvelle version immuable)
                 </Label>
                 <Input
                   id="ws-prompt"
@@ -484,8 +507,10 @@ export function WorkspaceClient({
             </div>
 
             {statusBanner && (
-              <Alert variant={statusBanner.type === 'ok' ? 'success' : 'destructive'}>
-                {statusBanner.type === 'ok' ? (
+              <Alert
+                variant={statusBanner.type === "ok" ? "success" : "destructive"}
+              >
+                {statusBanner.type === "ok" ? (
                   <CheckCircle2 className="h-4 w-4" />
                 ) : (
                   <AlertCircle className="h-4 w-4" />
@@ -498,7 +523,10 @@ export function WorkspaceClient({
       </Card>
 
       {/* Active Snapshot Header & Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as TabKey)}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => handleTabChange(v as TabKey)}
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <TabsList>
             <TabsTrigger value="constructibility">
@@ -530,13 +558,17 @@ export function WorkspaceClient({
           {activeSnapshot && (
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" asChild>
-                <a href={`/api/plu/export/${activeSnapshot.id}?format=archicad`}>
+                <a
+                  href={`/api/plu/export/${activeSnapshot.id}?format=archicad`}
+                >
                   <Download className="h-3.5 w-3.5 text-primary" />
                   Export Archicad
                 </a>
               </Button>
               <Button variant="outline" size="sm" asChild>
-                <a href={`/api/plu/export/${activeSnapshot.id}?format=markdown`}>
+                <a
+                  href={`/api/plu/export/${activeSnapshot.id}?format=markdown`}
+                >
                   <Download className="h-3.5 w-3.5 text-emerald-600" />
                   Rapport MD
                 </a>
@@ -563,7 +595,9 @@ export function WorkspaceClient({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 pt-0">
-                    <p className="text-xs text-muted-foreground">{activeSnapshot.originalPrompt}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {activeSnapshot.originalPrompt}
+                    </p>
                   </CardContent>
                 </Card>
               )}
@@ -572,40 +606,53 @@ export function WorkspaceClient({
             <div className="space-y-4 lg:col-span-7">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {[
-                  { label: 'Zone PLU', value: activeSnapshot?.zoneCode || 'Non identifiée' },
                   {
-                    label: 'Surface parcelle',
-                    value: calc.parcelSurfaceM2 ? `${calc.parcelSurfaceM2} m²` : 'N/A',
+                    label: "Zone PLU",
+                    value: activeSnapshot?.zoneCode || "Non identifiée",
                   },
                   {
-                    label: 'Emprise au sol max',
-                    value: calc.maxFootprintM2 ? `${calc.maxFootprintM2} m²` : 'N/A',
+                    label: "Surface parcelle",
+                    value: calc.parcelSurfaceM2
+                      ? `${calc.parcelSurfaceM2} m²`
+                      : "N/A",
                   },
                   {
-                    label: 'Emprise après reculs',
+                    label: "Emprise au sol max",
+                    value: calc.maxFootprintM2
+                      ? `${calc.maxFootprintM2} m²`
+                      : "N/A",
+                  },
+                  {
+                    label: "Emprise après reculs",
                     value: calc.estimatedBuildableFootprintM2
                       ? `${calc.estimatedBuildableFootprintM2} m²`
-                      : 'N/A',
+                      : "N/A",
                   },
                   {
-                    label: 'Hauteur max',
-                    value: calc.maxHeightM ? `${calc.maxHeightM} m` : 'N/A',
+                    label: "Hauteur max",
+                    value: calc.maxHeightM ? `${calc.maxHeightM} m` : "N/A",
                   },
                   {
-                    label: 'Niveaux estimés',
-                    value: calc.estimatedStoreys ? `R+${Number(calc.estimatedStoreys) - 1}` : 'N/A',
+                    label: "Niveaux estimés",
+                    value: calc.estimatedStoreys
+                      ? `R+${Number(calc.estimatedStoreys) - 1}`
+                      : "N/A",
                   },
                   {
-                    label: 'SDP max estimée',
-                    value: calc.maxFloorAreaSdpM2 ? `${calc.maxFloorAreaSdpM2} m²` : 'N/A',
+                    label: "SDP max estimée",
+                    value: calc.maxFloorAreaSdpM2
+                      ? `${calc.maxFloorAreaSdpM2} m²`
+                      : "N/A",
                   },
                   {
-                    label: 'Volume max estimé',
-                    value: calc.maxVolumeM3 ? `${calc.maxVolumeM3} m³` : 'N/A',
+                    label: "Volume max estimé",
+                    value: calc.maxVolumeM3 ? `${calc.maxVolumeM3} m³` : "N/A",
                   },
                   {
-                    label: 'Pleine terre min',
-                    value: calc.minGreenSpaceM2 ? `${calc.minGreenSpaceM2} m²` : 'N/A',
+                    label: "Pleine terre min",
+                    value: calc.minGreenSpaceM2
+                      ? `${calc.minGreenSpaceM2} m²`
+                      : "N/A",
                   },
                 ].map((kpi) => (
                   <Card key={kpi.label}>
@@ -615,7 +662,9 @@ export function WorkspaceClient({
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 pt-0">
-                      <div className="text-lg font-bold text-foreground">{kpi.value}</div>
+                      <div className="text-lg font-bold text-foreground">
+                        {kpi.value}
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -648,13 +697,20 @@ export function WorkspaceClient({
                   <CardTitle className="text-sm font-bold">
                     Validation & Paramètres extraits
                   </CardTitle>
-                  <Badge variant={activeSnapshot.validationStatus === 'valid' ? 'success' : 'warning'}>
-                    {activeSnapshot.validationStatus === 'valid' ? (
+                  <Badge
+                    variant={
+                      activeSnapshot.validationStatus === "valid"
+                        ? "success"
+                        : "warning"
+                    }
+                  >
+                    {activeSnapshot.validationStatus === "valid" ? (
                       <CheckCircle2 className="h-3.5 w-3.5" />
                     ) : (
                       <AlertTriangle className="h-3.5 w-3.5" />
                     )}
-                    {activeSnapshot.validationStatus} ({String(valReport.completenessScore ?? 0)}%)
+                    {activeSnapshot.validationStatus} (
+                    {String(valReport.completenessScore ?? 0)}%)
                   </Badge>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -664,44 +720,55 @@ export function WorkspaceClient({
                         key={k}
                         className="flex items-center justify-between rounded-lg bg-muted px-3 py-2"
                       >
-                        <span className="font-mono text-muted-foreground">{k}</span>
+                        <span className="font-mono text-muted-foreground">
+                          {k}
+                        </span>
                         <span className="font-bold text-foreground">
-                          {v !== null ? String(v) : '—'}
+                          {v !== null ? String(v) : "—"}
                         </span>
                       </div>
                     ))}
                   </div>
 
-                  {Array.isArray(valReport.issues) && valReport.issues.length > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="text-xs font-bold text-muted-foreground">
-                        Alertes de validation
-                      </div>
-                      {(valReport.issues as Array<{ severity: string; message: string }>).map(
-                        (issue, idx) => (
+                  {Array.isArray(valReport.issues) &&
+                    valReport.issues.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="text-xs font-bold text-muted-foreground">
+                          Alertes de validation
+                        </div>
+                        {(
+                          valReport.issues as Array<{
+                            severity: string;
+                            message: string;
+                          }>
+                        ).map((issue, idx) => (
                           <Alert key={idx} variant="warning">
                             <AlertTriangle className="h-4 w-4" />
                             <AlertDescription>
-                              <strong>[{issue.severity}]</strong> {issue.message}
+                              <strong>[{issue.severity}]</strong>{" "}
+                              {issue.message}
                             </AlertDescription>
                           </Alert>
-                        ),
-                      )}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-bold">
-                    Articles PLU extraits ({activeSnapshot.extractedArticles?.length || 0})
+                    Articles PLU extraits (
+                    {activeSnapshot.extractedArticles?.length || 0})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="max-h-[420px] space-y-3 overflow-auto">
                     {(activeSnapshot.extractedArticles || []).map((art, i) => (
-                      <div key={i} className="rounded-lg border bg-muted/50 p-3">
+                      <div
+                        key={i}
+                        className="rounded-lg border bg-muted/50 p-3"
+                      >
                         <div className="text-xs font-bold text-primary">
                           {art.articleNumber} — {art.title}
                         </div>
@@ -713,8 +780,8 @@ export function WorkspaceClient({
                     {(!activeSnapshot.extractedArticles ||
                       activeSnapshot.extractedArticles.length === 0) && (
                       <p className="text-xs text-muted-foreground">
-                        Aucun article officiel lié. Téléversez un règlement PLU dans &quot;Documents
-                        PLU&quot;.
+                        Aucun article officiel lié. Téléversez un règlement PLU
+                        dans &quot;Documents PLU&quot;.
                       </p>
                     )}
                   </div>
@@ -737,26 +804,36 @@ export function WorkspaceClient({
             ) : (
               snapshots.map((snap) => {
                 const isReplaying =
-                  replayMutation.isPending && replayMutation.variables === snap.id
+                  replayMutation.isPending &&
+                  replayMutation.variables === snap.id;
                 return (
                   <Card
                     key={snap.id}
-                    className={activeSnapshot?.id === snap.id ? 'border-primary bg-primary/5' : ''}
+                    className={
+                      activeSnapshot?.id === snap.id
+                        ? "border-primary bg-primary/5"
+                        : ""
+                    }
                   >
                     <CardContent className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="default" className="rounded font-mono text-[11px]">
+                          <Badge
+                            variant="default"
+                            className="rounded font-mono text-[11px]"
+                          >
                             v{snap.version}
                           </Badge>
                           <span className="text-sm font-bold text-foreground">
                             {snap.snapshotLabel}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            {new Date(snap.createdAt).toLocaleString('fr-FR')}
+                            {new Date(snap.createdAt).toLocaleString("fr-FR")}
                           </span>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">{snap.originalPrompt}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {snap.originalPrompt}
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
@@ -764,8 +841,8 @@ export function WorkspaceClient({
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setActiveSnapshot(snap)
-                            handleTabChange('constructibility')
+                            setActiveSnapshot(snap);
+                            handleTabChange("constructibility");
                           }}
                         >
                           Rouvrir
@@ -774,8 +851,8 @@ export function WorkspaceClient({
                           type="button"
                           size="sm"
                           onClick={() => {
-                            setStatusBanner(null)
-                            replayMutation.mutate(snap.id)
+                            setStatusBanner(null);
+                            replayMutation.mutate(snap.id);
                           }}
                           disabled={isReplaying}
                         >
@@ -789,7 +866,7 @@ export function WorkspaceClient({
                       </div>
                     </CardContent>
                   </Card>
-                )
+                );
               })
             )}
           </div>
@@ -808,7 +885,11 @@ export function WorkspaceClient({
                     </SelectTrigger>
                     <SelectContent>
                       {snapshots.map((s) => (
-                        <SelectItem key={s.id} value={String(s.id)} className="text-xs">
+                        <SelectItem
+                          key={s.id}
+                          value={String(s.id)}
+                          className="text-xs"
+                        >
                           {s.snapshotLabel}
                         </SelectItem>
                       ))}
@@ -823,7 +904,11 @@ export function WorkspaceClient({
                     </SelectTrigger>
                     <SelectContent>
                       {snapshots.map((s) => (
-                        <SelectItem key={s.id} value={String(s.id)} className="text-xs">
+                        <SelectItem
+                          key={s.id}
+                          value={String(s.id)}
+                          className="text-xs"
+                        >
                           {s.snapshotLabel}
                         </SelectItem>
                       ))}
@@ -836,41 +921,50 @@ export function WorkspaceClient({
                   onClick={() => compareMutation.mutate()}
                   disabled={compareMutation.isPending || !compareA || !compareB}
                 >
-                  {compareMutation.isPending ? 'Comparaison...' : 'Comparer les versions'}
+                  {compareMutation.isPending
+                    ? "Comparaison..."
+                    : "Comparer les versions"}
                 </Button>
               </div>
 
-              {compareResult && Array.isArray(compareResult.constructibilityDiff) && (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Métrique</TableHead>
-                      <TableHead>Snapshot A</TableHead>
-                      <TableHead>Snapshot B</TableHead>
-                      <TableHead>Delta</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(
-                      compareResult.constructibilityDiff as Array<{
-                        metric: string
-                        snapshotA: unknown
-                        snapshotB: unknown
-                        delta: number | null
-                      }>
-                    ).map((row) => (
-                      <TableRow key={row.metric}>
-                        <TableCell className="font-mono font-semibold">{row.metric}</TableCell>
-                        <TableCell>{String(row.snapshotA ?? '—')}</TableCell>
-                        <TableCell>{String(row.snapshotB ?? '—')}</TableCell>
-                        <TableCell className="font-semibold text-primary">
-                          {row.delta !== null ? (row.delta > 0 ? `+${row.delta}` : row.delta) : '—'}
-                        </TableCell>
+              {compareResult &&
+                Array.isArray(compareResult.constructibilityDiff) && (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Métrique</TableHead>
+                        <TableHead>Snapshot A</TableHead>
+                        <TableHead>Snapshot B</TableHead>
+                        <TableHead>Delta</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+                    </TableHeader>
+                    <TableBody>
+                      {(
+                        compareResult.constructibilityDiff as Array<{
+                          metric: string;
+                          snapshotA: unknown;
+                          snapshotB: unknown;
+                          delta: number | null;
+                        }>
+                      ).map((row) => (
+                        <TableRow key={row.metric}>
+                          <TableCell className="font-mono font-semibold">
+                            {row.metric}
+                          </TableCell>
+                          <TableCell>{String(row.snapshotA ?? "—")}</TableCell>
+                          <TableCell>{String(row.snapshotB ?? "—")}</TableCell>
+                          <TableCell className="font-semibold text-primary">
+                            {row.delta !== null
+                              ? row.delta > 0
+                                ? `+${row.delta}`
+                                : row.delta
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -881,25 +975,27 @@ export function WorkspaceClient({
             <Card>
               <CardContent className="space-y-3 p-5">
                 <div className="flex flex-wrap gap-2">
-                  {(['snapshot', 'archicad', 'gis', 'logs'] as const).map((sec) => (
-                    <Button
-                      key={sec}
-                      type="button"
-                      size="sm"
-                      variant={jsonSection === sec ? 'default' : 'secondary'}
-                      onClick={() => setJsonSection(sec)}
-                    >
-                      {sec.toUpperCase()}
-                    </Button>
-                  ))}
+                  {(["snapshot", "archicad", "gis", "logs"] as const).map(
+                    (sec) => (
+                      <Button
+                        key={sec}
+                        type="button"
+                        size="sm"
+                        variant={jsonSection === sec ? "default" : "secondary"}
+                        onClick={() => setJsonSection(sec)}
+                      >
+                        {sec.toUpperCase()}
+                      </Button>
+                    ),
+                  )}
                 </div>
                 <pre className="max-h-[500px] overflow-auto rounded-lg bg-slate-900 p-4 font-mono text-xs text-emerald-300">
                   {JSON.stringify(
-                    jsonSection === 'snapshot'
+                    jsonSection === "snapshot"
                       ? activeSnapshot
-                      : jsonSection === 'archicad'
+                      : jsonSection === "archicad"
                         ? activeSnapshot.archicadExport
-                        : jsonSection === 'gis'
+                        : jsonSection === "gis"
                           ? activeSnapshot.zoningAndGis
                           : {
                               logs: activeSnapshot.executionLogs,
@@ -920,35 +1016,56 @@ export function WorkspaceClient({
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Informations du projet</CardTitle>
+                  <CardTitle className="text-base">
+                    Informations du projet
+                  </CardTitle>
                   <CardDescription className="text-xs">
-                    Paramètres généraux du projet sélectionné dans l&apos;espace de travail
+                    Paramètres généraux du projet sélectionné dans l&apos;espace
+                    de travail
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <div className="text-xs font-semibold text-muted-foreground">Nom</div>
-                    <div className="mt-1 font-semibold text-foreground">{currentProject.name}</div>
+                    <div className="text-xs font-semibold text-muted-foreground">
+                      Nom
+                    </div>
+                    <div className="mt-1 font-semibold text-foreground">
+                      {currentProject.name}
+                    </div>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold text-muted-foreground">Commune</div>
-                    <div className="mt-1 text-foreground">{currentProject.commune}</div>
+                    <div className="text-xs font-semibold text-muted-foreground">
+                      Commune
+                    </div>
+                    <div className="mt-1 text-foreground">
+                      {currentProject.commune}
+                    </div>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold text-muted-foreground">Code INSEE</div>
-                    <div className="mt-1 font-mono text-foreground">{currentProject.codeInsee}</div>
+                    <div className="text-xs font-semibold text-muted-foreground">
+                      Code INSEE
+                    </div>
+                    <div className="mt-1 font-mono text-foreground">
+                      {currentProject.codeInsee}
+                    </div>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold text-muted-foreground">Territoire</div>
+                    <div className="text-xs font-semibold text-muted-foreground">
+                      Territoire
+                    </div>
                     <div className="mt-1">
                       <Badge variant="info">
-                        {currentProject.territory === 'amp' ? 'Métropole AMP' : 'GPU National'}
+                        {currentProject.territory === "amp"
+                          ? "Métropole AMP"
+                          : "GPU National"}
                       </Badge>
                     </div>
                   </div>
                   {currentProject.description && (
                     <div className="sm:col-span-2 lg:col-span-4">
-                      <div className="text-xs font-semibold text-muted-foreground">Description</div>
+                      <div className="text-xs font-semibold text-muted-foreground">
+                        Description
+                      </div>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {currentProject.description}
                       </p>
@@ -959,10 +1076,13 @@ export function WorkspaceClient({
 
               <Card className="border-destructive/40">
                 <CardHeader>
-                  <CardTitle className="text-base text-destructive">Zone de danger</CardTitle>
+                  <CardTitle className="text-base text-destructive">
+                    Zone de danger
+                  </CardTitle>
                   <CardDescription className="text-xs">
-                    La suppression du projet est définitive. Les analyses, snapshots et historiques
-                    associés seront supprimés, et les documents liés seront détachés du projet.
+                    La suppression du projet est définitive. Les analyses,
+                    snapshots et historiques associés seront supprimés, et les
+                    documents liés seront détachés du projet.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -972,7 +1092,7 @@ export function WorkspaceClient({
                       <AlertDescription>
                         {deleteProjectMutation.error instanceof Error
                           ? deleteProjectMutation.error.message
-                          : 'Impossible de supprimer le projet.'}
+                          : "Impossible de supprimer le projet."}
                       </AlertDescription>
                     </Alert>
                   )}
@@ -981,7 +1101,8 @@ export function WorkspaceClient({
                     <Alert variant="warning">
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription>
-                        Votre rôle ({userRole}) ne permet pas de supprimer un projet.
+                        Votre rôle ({userRole}) ne permet pas de supprimer un
+                        projet.
                       </AlertDescription>
                     </Alert>
                   )}
@@ -992,7 +1113,8 @@ export function WorkspaceClient({
                         Supprimer le projet « {currentProject.name} »
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Cette action supprimera le projet de la liste des études actives.
+                        Cette action supprimera le projet de la liste des études
+                        actives.
                       </p>
                     </div>
 
@@ -1001,7 +1123,9 @@ export function WorkspaceClient({
                         <Button
                           type="button"
                           variant="destructive"
-                          disabled={!canDeleteProject || deleteProjectMutation.isPending}
+                          disabled={
+                            !canDeleteProject || deleteProjectMutation.isPending
+                          }
                         >
                           {deleteProjectMutation.isPending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1013,17 +1137,24 @@ export function WorkspaceClient({
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Confirmer la suppression du projet</AlertDialogTitle>
+                          <AlertDialogTitle>
+                            Confirmer la suppression du projet
+                          </AlertDialogTitle>
                           <AlertDialogDescription>
-                            Êtes-vous sûr de vouloir supprimer définitivement le projet{' '}
-                            <strong className="text-foreground">{currentProject.name}</strong> ?
-                            Cette action est irréversible.
+                            Êtes-vous sûr de vouloir supprimer définitivement le
+                            projet{" "}
+                            <strong className="text-foreground">
+                              {currentProject.name}
+                            </strong>{" "}
+                            ? Cette action est irréversible.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Annuler</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={() => deleteProjectMutation.mutate(currentProject.id)}
+                            onClick={() =>
+                              deleteProjectMutation.mutate(currentProject.id)
+                            }
                           >
                             Supprimer définitivement
                           </AlertDialogAction>
@@ -1044,5 +1175,5 @@ export function WorkspaceClient({
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

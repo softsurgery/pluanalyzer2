@@ -1,134 +1,135 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileText, Info, Loader2, Sparkles, Upload } from 'lucide-react'
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FileText, Info, Loader2, Sparkles, Upload } from "lucide-react";
+import type { DocumentItem } from "@/types/documents";
 import {
-  apiFetch,
-  type DocumentItem,
+  documentKeys,
+  extractDocumentPdf,
   fetchDocuments,
-  fetchProjects,
-  queryKeys,
-} from '@/lib/api'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+  uploadDocument,
+} from "@/api/documents";
+import { fetchProjects, projectKeys } from "@/api/projects";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function DocumentsClient() {
-  const queryClient = useQueryClient()
-  const [title, setTitle] = useState('')
-  const [zoneCode, setZoneCode] = useState('UA')
-  const [codeInsee, setCodeInsee] = useState('13001')
-  const [projectId, setProjectId] = useState('')
-  const [file, setFile] = useState<File | null>(null)
-  const [selectedDoc, setSelectedDoc] = useState<DocumentItem | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const queryClient = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [zoneCode, setZoneCode] = useState("UA");
+  const [codeInsee, setCodeInsee] = useState("13001");
+  const [projectId, setProjectId] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [selectedDoc, setSelectedDoc] = useState<DocumentItem | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const documentsQuery = useQuery({
-    queryKey: queryKeys.documents(50),
+    queryKey: documentKeys.list(50),
     queryFn: () => fetchDocuments(50),
-  })
+  });
 
   const projectsQuery = useQuery({
-    queryKey: queryKeys.projects(50),
+    queryKey: projectKeys.list(50),
     queryFn: () => fetchProjects(50),
-  })
+  });
 
-  const documents = documentsQuery.data?.docs ?? []
-  const projects = projectsQuery.data?.docs ?? []
+  const documents = documentsQuery.data?.docs ?? [];
+  const projects = projectsQuery.data?.docs ?? [];
 
   useEffect(() => {
     if (!projectId && projects.length > 0) {
-      setProjectId(String(projects[0].id))
+      setProjectId(String(projects[0].id));
     }
-  }, [projectId, projects])
+  }, [projectId, projects]);
 
   useEffect(() => {
     if (!selectedDoc && documents.length > 0) {
-      setSelectedDoc(documents[0])
+      setSelectedDoc(documents[0]);
     }
-  }, [selectedDoc, documents])
+  }, [selectedDoc, documents]);
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
-      if (!file) throw new Error('Veuillez sélectionner un fichier.')
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append(
-        '_payload',
-        JSON.stringify({
-          title: title || file.name,
-          documentType: 'reglement',
-          zoneCode,
-          codeInsee,
-          commune: 'Aix-en-Provence',
-          project: projectId ? Number(projectId) : undefined,
-        }),
-      )
-      return apiFetch('/api/documents', {
-        method: 'POST',
-        body: formData,
-      })
+      if (!file) throw new Error("Veuillez sélectionner un fichier.");
+      return uploadDocument({
+        file,
+        title,
+        zoneCode,
+        codeInsee,
+        projectId,
+      });
     },
     onSuccess: async () => {
-      setTitle('')
-      setFile(null)
-      setMessage('Document enregistré dans Payload CMS.')
+      setTitle("");
+      setFile(null);
+      setMessage("Document enregistré dans Payload CMS.");
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['documents'] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.dashboardStats }),
-      ])
+        queryClient.invalidateQueries({ queryKey: documentKeys.all }),
+        queryClient.invalidateQueries({ queryKey: projectKeys.stats }),
+      ]);
     },
     onError: (err) => {
-      setMessage(err instanceof Error ? err.message : "Erreur lors de l'upload vers Payload CMS.")
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : "Erreur lors de l'upload vers Payload CMS.",
+      );
     },
-  })
+  });
 
   const extractMutation = useMutation({
-    mutationFn: (id: number | string) =>
-      apiFetch<{ document: DocumentItem; articles?: unknown[] }>(
-        `/api/plu/documents/${id}/extract`,
-        { method: 'POST' },
-      ),
+    mutationFn: (id: number | string) => extractDocumentPdf(id),
     onSuccess: async (data) => {
-      setSelectedDoc(data.document)
-      setMessage(`Extraction terminée (${data.articles?.length || 0} article(s) détecté(s)).`)
-      await queryClient.invalidateQueries({ queryKey: ['documents'] })
+      setSelectedDoc(data.document);
+      setMessage(
+        `Extraction terminée (${data.articles?.length || 0} article(s) détecté(s)).`,
+      );
+      await queryClient.invalidateQueries({ queryKey: documentKeys.all });
     },
     onError: (err) => {
-      setMessage(err instanceof Error ? err.message : "Échec de l'extraction PDF")
+      setMessage(
+        err instanceof Error ? err.message : "Échec de l'extraction PDF",
+      );
     },
-  })
+  });
 
   const handleUpload = (e: React.FormEvent) => {
-    e.preventDefault()
-    setMessage(null)
-    uploadMutation.mutate()
-  }
+    e.preventDefault();
+    setMessage(null);
+    uploadMutation.mutate();
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Gestion des Documents PLU</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          Gestion des Documents PLU
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Stockage Payload CMS, extraction de texte PDF & découpage automatique par articles
+          Stockage Payload CMS, extraction de texte PDF & découpage automatique
+          par articles
         </p>
       </div>
 
       {/* Upload Form */}
       <Card>
         <CardContent className="p-5">
-          <form onSubmit={handleUpload} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <form
+            onSubmit={handleUpload}
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"
+          >
             <div className="space-y-1.5 lg:col-span-2">
               <Label htmlFor="doc-title">Titre</Label>
               <Input
@@ -178,7 +179,11 @@ export function DocumentsClient() {
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
                 className="max-w-sm cursor-pointer text-xs file:mr-3 file:rounded-md file:bg-secondary file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-secondary-foreground"
               />
-              <Button type="submit" size="sm" disabled={uploadMutation.isPending || !file}>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={uploadMutation.isPending || !file}
+              >
                 {uploadMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
@@ -219,15 +224,16 @@ export function DocumentsClient() {
           ) : (
             documents.map((doc) => {
               const isExtracting =
-                extractMutation.isPending && extractMutation.variables === doc.id
+                extractMutation.isPending &&
+                extractMutation.variables === doc.id;
               return (
                 <Card
                   key={doc.id}
                   onClick={() => setSelectedDoc(doc)}
                   className={`cursor-pointer transition ${
                     selectedDoc?.id === doc.id
-                      ? 'border-primary bg-primary/5'
-                      : 'hover:border-muted-foreground/40'
+                      ? "border-primary bg-primary/5"
+                      : "hover:border-muted-foreground/40"
                   }`}
                 >
                   <CardContent className="p-4">
@@ -235,14 +241,16 @@ export function DocumentsClient() {
                       <div className="flex items-start gap-3">
                         <FileText className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                         <div>
-                          <div className="text-sm font-bold text-foreground">{doc.title}</div>
+                          <div className="text-sm font-bold text-foreground">
+                            {doc.title}
+                          </div>
                           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                            <span>Zone {doc.zoneCode || '—'}</span>
+                            <span>Zone {doc.zoneCode || "—"}</span>
                             <span>·</span>
-                            <span>INSEE {doc.codeInsee || '—'}</span>
+                            <span>INSEE {doc.codeInsee || "—"}</span>
                             <span>·</span>
                             <Badge variant="secondary" className="text-[10px]">
-                              {doc.extractionStatus || 'pending'}
+                              {doc.extractionStatus || "pending"}
                             </Badge>
                           </div>
                         </div>
@@ -253,9 +261,9 @@ export function DocumentsClient() {
                         variant="outline"
                         size="sm"
                         onClick={(e) => {
-                          e.stopPropagation()
-                          setMessage(null)
-                          extractMutation.mutate(doc.id)
+                          e.stopPropagation();
+                          setMessage(null);
+                          extractMutation.mutate(doc.id);
                         }}
                         disabled={isExtracting}
                       >
@@ -269,7 +277,7 @@ export function DocumentsClient() {
                     </div>
                   </CardContent>
                 </Card>
-              )
+              );
             })
           )}
         </div>
@@ -283,7 +291,9 @@ export function DocumentsClient() {
           <CardContent>
             {selectedDoc ? (
               <div className="space-y-2">
-                <div className="text-sm font-bold text-foreground">{selectedDoc.title}</div>
+                <div className="text-sm font-bold text-foreground">
+                  {selectedDoc.title}
+                </div>
                 <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-4 font-mono text-xs text-slate-100">
                   {selectedDoc.extractedText ||
                     'Aucun texte extrait. Cliquez sur "Extraire PDF" pour lancer l\'analyse.'}
@@ -291,12 +301,13 @@ export function DocumentsClient() {
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Sélectionnez un document pour inspecter son contenu réglementaire.
+                Sélectionnez un document pour inspecter son contenu
+                réglementaire.
               </p>
             )}
           </CardContent>
         </Card>
       </div>
     </div>
-  )
+  );
 }

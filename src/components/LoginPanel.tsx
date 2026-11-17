@@ -1,11 +1,11 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Building2, KeyRound, Loader2 } from 'lucide-react'
-import { apiFetch } from '@/lib/api'
-import { Button } from '@/components/ui/button'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, Building2, KeyRound, Loader2 } from "lucide-react";
+import { loginUser } from "@/api/auth";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -13,34 +13,29 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function LoginPanel() {
-  const router = useRouter()
-  const queryClient = useQueryClient()
-  const [email, setEmail] = useState('planner@pluanalyzer.fr')
-  const [password, setPassword] = useState('PluPlanner2026!')
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [email, setEmail] = useState("planner@pluanalyzer.fr");
+  const [password, setPassword] = useState("PluPlanner2026!");
 
   const loginMutation = useMutation({
-    mutationFn: () =>
-      apiFetch('/api/users/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      }),
+    mutationFn: () => loginUser({ email, password }),
     onSuccess: () => {
-      queryClient.clear()
-      router.refresh()
+      queryClient.clear();
+      router.refresh();
     },
-  })
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    loginMutation.mutate()
-  }
+    e.preventDefault();
+    loginMutation.mutate();
+  };
 
   return (
     <Card className="mx-auto mt-12 max-w-md rounded-2xl">
@@ -90,12 +85,16 @@ export function LoginPanel() {
               <AlertDescription>
                 {loginMutation.error instanceof Error
                   ? loginMutation.error.message
-                  : 'Identifiants invalides'}
+                  : "Identifiants invalides"}
               </AlertDescription>
             </Alert>
           )}
 
-          <Button type="submit" disabled={loginMutation.isPending} className="w-full">
+          <Button
+            type="submit"
+            disabled={loginMutation.isPending}
+            className="w-full"
+          >
             {loginMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -108,7 +107,9 @@ export function LoginPanel() {
 
       <CardFooter>
         <div className="w-full rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-          <div className="font-semibold text-foreground">Comptes de démonstration (seed) :</div>
+          <div className="font-semibold text-foreground">
+            Comptes de démonstration (seed) :
+          </div>
           <div className="mt-1 space-y-0.5 font-mono text-[11px]">
             <div>Urbaniste : planner@pluanalyzer.fr / PluPlanner2026!</div>
             <div>Admin : admin@pluanalyzer.fr / PluAdmin2026!</div>
@@ -117,5 +118,5 @@ export function LoginPanel() {
         </div>
       </CardFooter>
     </Card>
-  )
+  );
 }
