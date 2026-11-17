@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
-  AlertTriangle,
   CheckCircle2,
   Code2,
   Download,
@@ -13,14 +12,9 @@ import {
   GitCompare,
   History,
   Layers,
-  Loader2,
-  Play,
-  RotateCcw,
   Search,
   Settings,
-  Trash2,
 } from "lucide-react";
-import { ParcelMap } from "./ParcelMap";
 import type { SnapshotRecord } from "@/types/analyses";
 import type { ParcelRecord } from "@/types/parcels";
 import {
@@ -30,51 +24,21 @@ import {
   replaySnapshot,
   runAnalysis,
 } from "@/api/analyses";
-import {
-  fetchParcels,
-  lookupParcel,
-  parcelKeys,
-} from "@/api/parcels";
+import { fetchParcels, lookupParcel, parcelKeys } from "@/api/parcels";
 import { deleteProject, fetchProjects, projectKeys } from "@/api/projects";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnalysisTab } from "./workspace/AnalysisTab";
+import { CompareTab } from "./workspace/CompareTab";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  ConstructibilityTab,
+  type MapPreviewState,
+} from "./workspace/ConstructibilityTab";
+import { HistoryTab } from "./workspace/HistoryTab";
+import { JsonInspectorTab } from "./workspace/JsonInspectorTab";
+import { RegulationsTab } from "./workspace/RegulationsTab";
+import { SettingsTab } from "./workspace/SettingsTab";
 
 export type { ParcelRecord, SnapshotRecord };
 
@@ -85,6 +49,7 @@ interface WorkspaceClientProps {
 }
 
 type TabKey =
+  | "analysis"
   | "constructibility"
   | "regulations"
   | "history"
@@ -93,6 +58,7 @@ type TabKey =
   | "settings";
 
 const VALID_TABS: readonly TabKey[] = [
+  "analysis",
   "constructibility",
   "regulations",
   "history",
@@ -106,8 +72,6 @@ function resolveTabKey(tab?: string): TabKey {
     ? (tab as TabKey)
     : "constructibility";
 }
-
-const AUTO_PARCEL_VALUE = "__auto__";
 
 export function WorkspaceClient({
   initialProjectId,
@@ -140,12 +104,7 @@ export function WorkspaceClient({
   } | null>(null);
 
   // Map preview state
-  const [mapPreview, setMapPreview] = useState<{
-    centroid?: { lng?: number | null; lat?: number | null } | null;
-    geometry?: unknown;
-    label?: string;
-    zoneCode?: string;
-  }>({});
+  const [mapPreview, setMapPreview] = useState<MapPreviewState>({});
 
   // Comparison state
   const [compareA, setCompareA] = useState<string>("");
@@ -154,11 +113,6 @@ export function WorkspaceClient({
     string,
     unknown
   > | null>(null);
-
-  // JSON inspector section
-  const [jsonSection, setJsonSection] = useState<
-    "snapshot" | "archicad" | "gis" | "logs"
-  >("snapshot");
 
   // Queries
   const projectsQuery = useQuery({
@@ -362,173 +316,31 @@ export function WorkspaceClient({
     runAnalysisMutation.mutate();
   };
 
-  const calc = (activeSnapshot?.constructibilityCalculations || {}) as Record<
-    string,
-    unknown
-  >;
-  const interp = (activeSnapshot?.regulatoryInterpretation || {}) as Record<
-    string,
-    unknown
-  >;
-  const rules = (interp.rules || {}) as Record<string, unknown>;
-  const valReport = (activeSnapshot?.validationReport || {}) as Record<
-    string,
-    unknown
-  >;
-
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-      {/* Top Control Panel */}
-      <Card className="rounded-2xl">
-        <CardContent className="p-5">
-          <form onSubmit={handleRunAnalysis} className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-12">
-              <div className="space-y-1.5 lg:col-span-3">
-                <Label htmlFor="ws-project">Projet</Label>
-                <Select value={projectId} onValueChange={handleProjectChange}>
-                  <SelectTrigger id="ws-project">
-                    <SelectValue placeholder="Sélectionner un projet" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.name} ({p.codeInsee})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+      {statusBanner && (
+        <Alert
+          variant={statusBanner.type === "ok" ? "success" : "destructive"}
+        >
+          {statusBanner.type === "ok" ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : (
+            <AlertCircle className="h-4 w-4" />
+          )}
+          <AlertDescription>{statusBanner.text}</AlertDescription>
+        </Alert>
+      )}
 
-              <div className="space-y-1.5 lg:col-span-4">
-                <Label htmlFor="ws-address">
-                  Adresse française (BAN / Géoplateforme)
-                </Label>
-                <Input
-                  id="ws-address"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Ex: 12 Avenue Sextius, Aix-en-Provence"
-                />
-              </div>
-
-              <div className="space-y-1.5 lg:col-span-3">
-                <Label htmlFor="ws-idu">
-                  IDU Cadastral ou Parcelle enregistrée
-                </Label>
-                <Input
-                  id="ws-idu"
-                  value={idu}
-                  onChange={(e) => setIdu(e.target.value)}
-                  placeholder="IDU (ex: 13001000AB0123)"
-                  className="font-mono"
-                />
-              </div>
-
-              <div className="flex items-end lg:col-span-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setStatusBanner(null);
-                    parcelLookupMutation.mutate();
-                  }}
-                  disabled={parcelLookupMutation.isPending}
-                  className="w-full"
-                >
-                  {parcelLookupMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Search className="h-4 w-4 text-primary" />
-                  )}
-                  Localiser IGN
-                </Button>
-              </div>
-
-              <div className="space-y-1.5 lg:col-span-3">
-                <Label htmlFor="ws-parcel">Ou parcelle en base</Label>
-                <Select
-                  value={selectedParcelId || AUTO_PARCEL_VALUE}
-                  onValueChange={(value) => {
-                    const nextId = value === AUTO_PARCEL_VALUE ? "" : value;
-                    setSelectedParcelId(nextId);
-                    const found = parcels.find((p) => String(p.id) === nextId);
-                    if (found) {
-                      setMapPreview({
-                        centroid: found.centroid,
-                        geometry: found.geometry,
-                        label: `${found.idu} (${found.surfaceM2 ?? "?"} m²)`,
-                      });
-                    }
-                  }}
-                >
-                  <SelectTrigger id="ws-parcel" className="font-mono">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={AUTO_PARCEL_VALUE}>
-                      — Auto via recherche —
-                    </SelectItem>
-                    {parcels.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.idu} ({p.surfaceM2 ?? "?"} m²)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5 lg:col-span-7">
-                <Label htmlFor="ws-prompt">
-                  Prompt d&apos;analyse de faisabilité (chaque envoi crée une
-                  nouvelle version immuable)
-                </Label>
-                <Input
-                  id="ws-prompt"
-                  required
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                />
-              </div>
-
-              <div className="flex items-end lg:col-span-2">
-                <Button
-                  type="submit"
-                  disabled={runAnalysisMutation.isPending || !projectId}
-                  className="w-full"
-                >
-                  {runAnalysisMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
-                  Analyser PLU
-                </Button>
-              </div>
-            </div>
-
-            {statusBanner && (
-              <Alert
-                variant={statusBanner.type === "ok" ? "success" : "destructive"}
-              >
-                {statusBanner.type === "ok" ? (
-                  <CheckCircle2 className="h-4 w-4" />
-                ) : (
-                  <AlertCircle className="h-4 w-4" />
-                )}
-                <AlertDescription>{statusBanner.text}</AlertDescription>
-              </Alert>
-            )}
-          </form>
-        </CardContent>
-      </Card>
-
-      {/* Active Snapshot Header & Tabs */}
       <Tabs
         value={activeTab}
         onValueChange={(v) => handleTabChange(v as TabKey)}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <TabsList>
+            <TabsTrigger value="analysis">
+              <Search className="h-3.5 w-3.5" />
+              Analyse & Parcelle
+            </TabsTrigger>
             <TabsTrigger value="constructibility">
               <Layers className="h-3.5 w-3.5" />
               Constructibilité & Carte
@@ -577,601 +389,99 @@ export function WorkspaceClient({
           )}
         </div>
 
-        {/* TAB 1: Constructibility & Map */}
+        <TabsContent value="analysis">
+          <AnalysisTab
+            projects={projects}
+            parcels={parcels}
+            projectId={projectId}
+            onProjectChange={handleProjectChange}
+            address={address}
+            onAddressChange={setAddress}
+            idu={idu}
+            onIduChange={setIdu}
+            selectedParcelId={selectedParcelId}
+            onParcelSelect={(nextId, found) => {
+              setSelectedParcelId(nextId);
+              if (found) {
+                setMapPreview({
+                  centroid: found.centroid,
+                  geometry: found.geometry,
+                  label: `${found.idu} (${found.surfaceM2 ?? "?"} m²)`,
+                });
+              }
+            }}
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            onLookupParcel={() => {
+              setStatusBanner(null);
+              parcelLookupMutation.mutate();
+            }}
+            isLookingUpParcel={parcelLookupMutation.isPending}
+            onSubmit={handleRunAnalysis}
+            isRunningAnalysis={runAnalysisMutation.isPending}
+          />
+        </TabsContent>
+
         <TabsContent value="constructibility">
-          <div className="grid gap-6 lg:grid-cols-12">
-            <div className="space-y-3 lg:col-span-5">
-              <ParcelMap
-                centroid={mapPreview.centroid}
-                geometry={mapPreview.geometry}
-                parcelLabel={mapPreview.label}
-                zoneCode={activeSnapshot?.zoneCode || mapPreview.zoneCode}
-              />
-              {activeSnapshot && (
-                <Card>
-                  <CardHeader className="p-4 pb-1">
-                    <CardTitle className="text-xs font-bold">
-                      {activeSnapshot.snapshotLabel}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-0">
-                    <p className="text-xs text-muted-foreground">
-                      {activeSnapshot.originalPrompt}
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            <div className="space-y-4 lg:col-span-7">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {[
-                  {
-                    label: "Zone PLU",
-                    value: activeSnapshot?.zoneCode || "Non identifiée",
-                  },
-                  {
-                    label: "Surface parcelle",
-                    value: calc.parcelSurfaceM2
-                      ? `${calc.parcelSurfaceM2} m²`
-                      : "N/A",
-                  },
-                  {
-                    label: "Emprise au sol max",
-                    value: calc.maxFootprintM2
-                      ? `${calc.maxFootprintM2} m²`
-                      : "N/A",
-                  },
-                  {
-                    label: "Emprise après reculs",
-                    value: calc.estimatedBuildableFootprintM2
-                      ? `${calc.estimatedBuildableFootprintM2} m²`
-                      : "N/A",
-                  },
-                  {
-                    label: "Hauteur max",
-                    value: calc.maxHeightM ? `${calc.maxHeightM} m` : "N/A",
-                  },
-                  {
-                    label: "Niveaux estimés",
-                    value: calc.estimatedStoreys
-                      ? `R+${Number(calc.estimatedStoreys) - 1}`
-                      : "N/A",
-                  },
-                  {
-                    label: "SDP max estimée",
-                    value: calc.maxFloorAreaSdpM2
-                      ? `${calc.maxFloorAreaSdpM2} m²`
-                      : "N/A",
-                  },
-                  {
-                    label: "Volume max estimé",
-                    value: calc.maxVolumeM3 ? `${calc.maxVolumeM3} m³` : "N/A",
-                  },
-                  {
-                    label: "Pleine terre min",
-                    value: calc.minGreenSpaceM2
-                      ? `${calc.minGreenSpaceM2} m²`
-                      : "N/A",
-                  },
-                ].map((kpi) => (
-                  <Card key={kpi.label}>
-                    <CardHeader className="p-4 pb-1">
-                      <CardDescription className="text-[11px] font-semibold uppercase tracking-wide">
-                        {kpi.label}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0">
-                      <div className="text-lg font-bold text-foreground">
-                        {kpi.value}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-
-              {interp.summary ? (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                      Synthèse réglementaire
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm leading-relaxed text-foreground/90">
-                      {String(interp.summary)}
-                    </p>
-                  </CardContent>
-                </Card>
-              ) : null}
-            </div>
-          </div>
+          <ConstructibilityTab
+            mapPreview={mapPreview}
+            activeSnapshot={activeSnapshot}
+          />
         </TabsContent>
 
-        {/* TAB 2: Regulations & Validation */}
         <TabsContent value="regulations">
-          {activeSnapshot && (
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card>
-                <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
-                  <CardTitle className="text-sm font-bold">
-                    Validation & Paramètres extraits
-                  </CardTitle>
-                  <Badge
-                    variant={
-                      activeSnapshot.validationStatus === "valid"
-                        ? "success"
-                        : "warning"
-                    }
-                  >
-                    {activeSnapshot.validationStatus === "valid" ? (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    ) : (
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                    )}
-                    {activeSnapshot.validationStatus} (
-                    {String(valReport.completenessScore ?? 0)}%)
-                  </Badge>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    {Object.entries(rules).map(([k, v]) => (
-                      <div
-                        key={k}
-                        className="flex items-center justify-between rounded-lg bg-muted px-3 py-2"
-                      >
-                        <span className="font-mono text-muted-foreground">
-                          {k}
-                        </span>
-                        <span className="font-bold text-foreground">
-                          {v !== null ? String(v) : "—"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {Array.isArray(valReport.issues) &&
-                    valReport.issues.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="text-xs font-bold text-muted-foreground">
-                          Alertes de validation
-                        </div>
-                        {(
-                          valReport.issues as Array<{
-                            severity: string;
-                            message: string;
-                          }>
-                        ).map((issue, idx) => (
-                          <Alert key={idx} variant="warning">
-                            <AlertTriangle className="h-4 w-4" />
-                            <AlertDescription>
-                              <strong>[{issue.severity}]</strong>{" "}
-                              {issue.message}
-                            </AlertDescription>
-                          </Alert>
-                        ))}
-                      </div>
-                    )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-bold">
-                    Articles PLU extraits (
-                    {activeSnapshot.extractedArticles?.length || 0})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="max-h-[420px] space-y-3 overflow-auto">
-                    {(activeSnapshot.extractedArticles || []).map((art, i) => (
-                      <div
-                        key={i}
-                        className="rounded-lg border bg-muted/50 p-3"
-                      >
-                        <div className="text-xs font-bold text-primary">
-                          {art.articleNumber} — {art.title}
-                        </div>
-                        <p className="mt-1 whitespace-pre-wrap text-xs text-foreground/80">
-                          {art.content}
-                        </p>
-                      </div>
-                    ))}
-                    {(!activeSnapshot.extractedArticles ||
-                      activeSnapshot.extractedArticles.length === 0) && (
-                      <p className="text-xs text-muted-foreground">
-                        Aucun article officiel lié. Téléversez un règlement PLU
-                        dans &quot;Documents PLU&quot;.
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+          <RegulationsTab activeSnapshot={activeSnapshot} />
         </TabsContent>
 
-        {/* TAB 3: Prompt History & Replay */}
         <TabsContent value="history">
-          <div className="space-y-3">
-            {snapshotsQuery.isLoading ? (
-              <Card>
-                <CardContent className="flex items-center justify-center gap-2 p-8 text-xs text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Chargement de l&apos;historique...
-                </CardContent>
-              </Card>
-            ) : (
-              snapshots.map((snap) => {
-                const isReplaying =
-                  replayMutation.isPending &&
-                  replayMutation.variables === snap.id;
-                return (
-                  <Card
-                    key={snap.id}
-                    className={
-                      activeSnapshot?.id === snap.id
-                        ? "border-primary bg-primary/5"
-                        : ""
-                    }
-                  >
-                    <CardContent className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant="default"
-                            className="rounded font-mono text-[11px]"
-                          >
-                            v{snap.version}
-                          </Badge>
-                          <span className="text-sm font-bold text-foreground">
-                            {snap.snapshotLabel}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(snap.createdAt).toLocaleString("fr-FR")}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {snap.originalPrompt}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setActiveSnapshot(snap);
-                            handleTabChange("constructibility");
-                          }}
-                        >
-                          Rouvrir
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => {
-                            setStatusBanner(null);
-                            replayMutation.mutate(snap.id);
-                          }}
-                          disabled={isReplaying}
-                        >
-                          {isReplaying ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <RotateCcw className="h-3.5 w-3.5" />
-                          )}
-                          Rejouer
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
-          </div>
+          <HistoryTab
+            snapshots={snapshots}
+            activeSnapshot={activeSnapshot}
+            isLoading={snapshotsQuery.isLoading}
+            isReplaying={replayMutation.isPending}
+            replayingSnapshotId={replayMutation.variables}
+            onReopenSnapshot={(snap) => {
+              setActiveSnapshot(snap);
+              handleTabChange("constructibility");
+            }}
+            onReplaySnapshot={(snapshotId) => {
+              setStatusBanner(null);
+              replayMutation.mutate(snapshotId);
+            }}
+          />
         </TabsContent>
 
-        {/* TAB 4: Historical Comparison */}
         <TabsContent value="compare">
-          <Card>
-            <CardContent className="space-y-4 p-5">
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="min-w-[220px] space-y-1.5">
-                  <Label htmlFor="compare-a">Snapshot A</Label>
-                  <Select value={compareA} onValueChange={setCompareA}>
-                    <SelectTrigger id="compare-a" className="text-xs">
-                      <SelectValue placeholder="Sélectionner Snapshot A" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {snapshots.map((s) => (
-                        <SelectItem
-                          key={s.id}
-                          value={String(s.id)}
-                          className="text-xs"
-                        >
-                          {s.snapshotLabel}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="min-w-[220px] space-y-1.5">
-                  <Label htmlFor="compare-b">Snapshot B</Label>
-                  <Select value={compareB} onValueChange={setCompareB}>
-                    <SelectTrigger id="compare-b" className="text-xs">
-                      <SelectValue placeholder="Sélectionner Snapshot B" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {snapshots.map((s) => (
-                        <SelectItem
-                          key={s.id}
-                          value={String(s.id)}
-                          className="text-xs"
-                        >
-                          {s.snapshotLabel}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => compareMutation.mutate()}
-                  disabled={compareMutation.isPending || !compareA || !compareB}
-                >
-                  {compareMutation.isPending
-                    ? "Comparaison..."
-                    : "Comparer les versions"}
-                </Button>
-              </div>
-
-              {compareResult &&
-                Array.isArray(compareResult.constructibilityDiff) && (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Métrique</TableHead>
-                        <TableHead>Snapshot A</TableHead>
-                        <TableHead>Snapshot B</TableHead>
-                        <TableHead>Delta</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(
-                        compareResult.constructibilityDiff as Array<{
-                          metric: string;
-                          snapshotA: unknown;
-                          snapshotB: unknown;
-                          delta: number | null;
-                        }>
-                      ).map((row) => (
-                        <TableRow key={row.metric}>
-                          <TableCell className="font-mono font-semibold">
-                            {row.metric}
-                          </TableCell>
-                          <TableCell>{String(row.snapshotA ?? "—")}</TableCell>
-                          <TableCell>{String(row.snapshotB ?? "—")}</TableCell>
-                          <TableCell className="font-semibold text-primary">
-                            {row.delta !== null
-                              ? row.delta > 0
-                                ? `+${row.delta}`
-                                : row.delta
-                              : "—"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-            </CardContent>
-          </Card>
+          <CompareTab
+            snapshots={snapshots}
+            compareA={compareA}
+            compareB={compareB}
+            onCompareAChange={setCompareA}
+            onCompareBChange={setCompareB}
+            onCompare={() => compareMutation.mutate()}
+            isComparing={compareMutation.isPending}
+            compareResult={compareResult}
+          />
         </TabsContent>
 
-        {/* TAB 5: Payload JSON Inspector */}
         <TabsContent value="json">
-          {activeSnapshot && (
-            <Card>
-              <CardContent className="space-y-3 p-5">
-                <div className="flex flex-wrap gap-2">
-                  {(["snapshot", "archicad", "gis", "logs"] as const).map(
-                    (sec) => (
-                      <Button
-                        key={sec}
-                        type="button"
-                        size="sm"
-                        variant={jsonSection === sec ? "default" : "secondary"}
-                        onClick={() => setJsonSection(sec)}
-                      >
-                        {sec.toUpperCase()}
-                      </Button>
-                    ),
-                  )}
-                </div>
-                <pre className="max-h-[500px] overflow-auto rounded-lg bg-slate-900 p-4 font-mono text-xs text-emerald-300">
-                  {JSON.stringify(
-                    jsonSection === "snapshot"
-                      ? activeSnapshot
-                      : jsonSection === "archicad"
-                        ? activeSnapshot.archicadExport
-                        : jsonSection === "gis"
-                          ? activeSnapshot.zoningAndGis
-                          : {
-                              logs: activeSnapshot.executionLogs,
-                              errors: activeSnapshot.executionErrors,
-                            },
-                    null,
-                    2,
-                  )}
-                </pre>
-              </CardContent>
-            </Card>
-          )}
+          <JsonInspectorTab activeSnapshot={activeSnapshot} />
         </TabsContent>
 
-        {/* TAB 6: Project Settings */}
         <TabsContent value="settings">
-          {currentProject ? (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    Informations du projet
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Paramètres généraux du projet sélectionné dans l&apos;espace
-                    de travail
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground">
-                      Nom
-                    </div>
-                    <div className="mt-1 font-semibold text-foreground">
-                      {currentProject.name}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground">
-                      Commune
-                    </div>
-                    <div className="mt-1 text-foreground">
-                      {currentProject.commune}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground">
-                      Code INSEE
-                    </div>
-                    <div className="mt-1 font-mono text-foreground">
-                      {currentProject.codeInsee}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground">
-                      Territoire
-                    </div>
-                    <div className="mt-1">
-                      <Badge variant="info">
-                        {currentProject.territory === "amp"
-                          ? "Métropole AMP"
-                          : "GPU National"}
-                      </Badge>
-                    </div>
-                  </div>
-                  {currentProject.description && (
-                    <div className="sm:col-span-2 lg:col-span-4">
-                      <div className="text-xs font-semibold text-muted-foreground">
-                        Description
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {currentProject.description}
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="border-destructive/40">
-                <CardHeader>
-                  <CardTitle className="text-base text-destructive">
-                    Zone de danger
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    La suppression du projet est définitive. Les analyses,
-                    snapshots et historiques associés seront supprimés, et les
-                    documents liés seront détachés du projet.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {deleteProjectMutation.isError && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        {deleteProjectMutation.error instanceof Error
-                          ? deleteProjectMutation.error.message
-                          : "Impossible de supprimer le projet."}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {!canDeleteProject && (
-                    <Alert variant="warning">
-                      <AlertTriangle className="h-4 w-4" />
-                      <AlertDescription>
-                        Votre rôle ({userRole}) ne permet pas de supprimer un
-                        projet.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  <div className="flex flex-col justify-between gap-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center">
-                    <div>
-                      <div className="text-sm font-semibold text-foreground">
-                        Supprimer le projet « {currentProject.name} »
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Cette action supprimera le projet de la liste des études
-                        actives.
-                      </p>
-                    </div>
-
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          disabled={
-                            !canDeleteProject || deleteProjectMutation.isPending
-                          }
-                        >
-                          {deleteProjectMutation.isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                          Supprimer le projet
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            Confirmer la suppression du projet
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Êtes-vous sûr de vouloir supprimer définitivement le
-                            projet{" "}
-                            <strong className="text-foreground">
-                              {currentProject.name}
-                            </strong>{" "}
-                            ? Cette action est irréversible.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() =>
-                              deleteProjectMutation.mutate(currentProject.id)
-                            }
-                          >
-                            Supprimer définitivement
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                Sélectionnez un projet pour accéder à ses paramètres.
-              </CardContent>
-            </Card>
-          )}
+          <SettingsTab
+            currentProject={currentProject}
+            userRole={userRole}
+            canDeleteProject={canDeleteProject}
+            isDeleting={deleteProjectMutation.isPending}
+            deleteError={
+              deleteProjectMutation.isError &&
+              deleteProjectMutation.error instanceof Error
+                ? deleteProjectMutation.error
+                : null
+            }
+            onDeleteProject={(id) => deleteProjectMutation.mutate(id)}
+          />
         </TabsContent>
       </Tabs>
     </div>
