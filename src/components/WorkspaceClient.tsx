@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   AlertCircle,
   AlertTriangle,
@@ -16,8 +16,21 @@ import {
   Play,
   RotateCcw,
   Search,
+  Settings,
+  Trash2,
 } from 'lucide-react'
 import { ParcelMap } from './ParcelMap'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -75,14 +88,39 @@ export interface ParcelRecord {
   geometry?: unknown
 }
 
+interface ProjectSummary {
+  id: number | string
+  name: string
+  commune: string
+  codeInsee: string
+  territory?: string | null
+  status?: string | null
+  description?: string | null
+}
+
 interface WorkspaceClientProps {
-  projects: Array<{ id: number | string; name: string; commune: string; codeInsee: string }>
+  projects: ProjectSummary[]
   parcels: ParcelRecord[]
   snapshots: SnapshotRecord[]
   initialProjectId?: string
+  initialTab?: string
+  userRole?: string
 }
 
-type TabKey = 'constructibility' | 'regulations' | 'history' | 'compare' | 'json'
+type TabKey = 'constructibility' | 'regulations' | 'history' | 'compare' | 'json' | 'settings'
+
+const VALID_TABS: readonly TabKey[] = [
+  'constructibility',
+  'regulations',
+  'history',
+  'compare',
+  'json',
+  'settings',
+]
+
+function resolveTabKey(tab?: string): TabKey {
+  return VALID_TABS.includes(tab as TabKey) ? (tab as TabKey) : 'constructibility'
+}
 
 const AUTO_PARCEL_VALUE = '__auto__'
 
@@ -91,13 +129,24 @@ export function WorkspaceClient({
   parcels,
   snapshots: initialSnapshots,
   initialProjectId,
+  initialTab,
+  userRole,
 }: WorkspaceClientProps) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [snapshots, setSnapshots] = useState<SnapshotRecord[]>(initialSnapshots)
   const [activeSnapshot, setActiveSnapshot] = useState<SnapshotRecord | null>(
     initialSnapshots[0] || null,
   )
-  const [activeTab, setActiveTab] = useState<TabKey>('constructibility')
+  const [activeTab, setActiveTab] = useState<TabKey>(() => resolveTabKey(initialTab))
+
+  const handleTabChange = (nextTab: TabKey) => {
+    setActiveTab(nextTab)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', nextTab)
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }
 
   // Form state
   const [projectId, setProjectId] = useState<string>(
@@ -154,6 +203,13 @@ export function WorkspaceClient({
   const [jsonSection, setJsonSection] = useState<'snapshot' | 'archicad' | 'gis' | 'logs'>(
     'snapshot',
   )
+
+  // Project deletion state
+  const [deletingProject, setDeletingProject] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const currentProject = projects.find((p) => String(p.id) === projectId) || null
+  const canDeleteProject = userRole !== 'viewer'
 
   const handleParcelLookup = async () => {
     setLookupLoading(true)
@@ -274,6 +330,30 @@ export function WorkspaceClient({
       setCompareResult(data)
     } finally {
       setComparing(false)
+    }
+  }
+
+  const handleDeleteProject = async () => {
+    if (!currentProject) return
+    setDeletingProject(true)
+    setDeleteError(null)
+    try {
+      const res = await fetch(`/api/projects/${currentProject.id}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setDeleteError(
+          data?.errors?.[0]?.message || 'Impossible de supprimer le projet (droits insuffisants).',
+        )
+        return
+      }
+      router.push('/')
+      router.refresh()
+    } catch {
+      setDeleteError('Erreur réseau lors de la suppression du projet.')
+    } finally {
+      setDeletingProject(false)
     }
   }
 
@@ -414,7 +494,7 @@ export function WorkspaceClient({
       </Card>
 
       {/* Active Snapshot Header & Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)}>
+      <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as TabKey)}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <TabsList>
             <TabsTrigger value="constructibility">
@@ -436,6 +516,10 @@ export function WorkspaceClient({
             <TabsTrigger value="json">
               <Code2 className="h-3.5 w-3.5" />
               Inspecteur JSON
+            </TabsTrigger>
+            <TabsTrigger value="settings">
+              <Settings className="h-3.5 w-3.5" />
+              Paramètres
             </TabsTrigger>
           </TabsList>
 
@@ -666,7 +750,7 @@ export function WorkspaceClient({
                       size="sm"
                       onClick={() => {
                         setActiveSnapshot(snap)
-                        setActiveTab('constructibility')
+                        handleTabChange('constructibility')
                       }}
                     >
                       Rouvrir
@@ -805,6 +889,129 @@ export function WorkspaceClient({
                     2,
                   )}
                 </pre>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* TAB 6: Project Settings */}
+        <TabsContent value="settings">
+          {currentProject ? (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Informations du projet</CardTitle>
+                  <CardDescription className="text-xs">
+                    Paramètres généraux du projet sélectionné dans l&apos;espace de travail
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground">Nom</div>
+                    <div className="mt-1 font-semibold text-foreground">{currentProject.name}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground">Commune</div>
+                    <div className="mt-1 text-foreground">{currentProject.commune}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground">Code INSEE</div>
+                    <div className="mt-1 font-mono text-foreground">{currentProject.codeInsee}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground">Territoire</div>
+                    <div className="mt-1">
+                      <Badge variant="info">
+                        {currentProject.territory === 'amp' ? 'Métropole AMP' : 'GPU National'}
+                      </Badge>
+                    </div>
+                  </div>
+                  {currentProject.description && (
+                    <div className="sm:col-span-2 lg:col-span-4">
+                      <div className="text-xs font-semibold text-muted-foreground">Description</div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {currentProject.description}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-destructive/40">
+                <CardHeader>
+                  <CardTitle className="text-base text-destructive">Zone de danger</CardTitle>
+                  <CardDescription className="text-xs">
+                    La suppression du projet est définitive. Les analyses, snapshots et historiques
+                    associés seront supprimés, et les documents liés seront détachés du projet.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {deleteError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{deleteError}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  {!canDeleteProject && (
+                    <Alert variant="warning">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        Votre rôle ({userRole}) ne permet pas de supprimer un projet.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="flex flex-col justify-between gap-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">
+                        Supprimer le projet « {currentProject.name} »
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Cette action supprimera le projet de la liste des études actives.
+                      </p>
+                    </div>
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          disabled={!canDeleteProject || deletingProject}
+                        >
+                          {deletingProject ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                          Supprimer le projet
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Confirmer la suppression du projet</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Êtes-vous sûr de vouloir supprimer définitivement le projet{' '}
+                            <strong className="text-foreground">{currentProject.name}</strong> ?
+                            Cette action est irréversible.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Annuler</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleDeleteProject}>
+                            Supprimer définitivement
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                Sélectionnez un projet pour accéder à ses paramètres.
               </CardContent>
             </Card>
           )}

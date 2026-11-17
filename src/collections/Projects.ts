@@ -1,5 +1,9 @@
 import type { CollectionConfig } from 'payload'
-import { isAdmin, isAuthenticated, isPlannerOrAdmin } from '@/access/roles'
+import {
+  isAuthenticated,
+  isOwnerOrPlannerOrAdmin,
+  isPlannerOrAdmin,
+} from '@/access/roles'
 
 export const Projects: CollectionConfig = {
   slug: 'projects',
@@ -12,7 +16,32 @@ export const Projects: CollectionConfig = {
     read: isAuthenticated,
     create: isPlannerOrAdmin,
     update: isPlannerOrAdmin,
-    delete: isAdmin,
+    delete: isOwnerOrPlannerOrAdmin,
+  },
+  hooks: {
+    beforeDelete: [
+      async ({ id, req }) => {
+        const { payload } = req
+        await payload.delete({
+          collection: 'prompt-history',
+          where: { project: { equals: id } },
+          overrideAccess: true,
+          req,
+        })
+        await payload.delete({
+          collection: 'analysis-snapshots',
+          where: { project: { equals: id } },
+          overrideAccess: true,
+          req,
+        })
+        await payload.delete({
+          collection: 'analyses',
+          where: { project: { equals: id } },
+          overrideAccess: true,
+          req,
+        })
+      },
+    ],
   },
   fields: [
     {
