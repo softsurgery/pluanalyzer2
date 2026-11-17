@@ -7,6 +7,7 @@ import type { AuthUser } from '@/access/roles'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { ModeToggle } from '@/components/mode-toggle'
 
 export function Navbar({ user }: { user: AuthUser | null }) {
   const pathname = usePathname()
@@ -68,6 +69,8 @@ export function Navbar({ user }: { user: AuthUser | null }) {
         </div>
 
         <div className="flex items-center gap-3">
+          <ModeToggle />
+
           <Button variant="outline" size="sm" asChild>
             <Link href="/admin">
               <ShieldCheck className="h-3.5 w-3.5 text-primary" />
