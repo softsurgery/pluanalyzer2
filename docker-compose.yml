@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    pull_policy: if_not_present
+    container_name: plu-analyzer-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: plu_analyzer
+      POSTGRES_USER: plu_user
+      POSTGRES_PASSWORD: plu_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - plu_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plu_user -d plu_analyzer"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  plu_pgdata:
