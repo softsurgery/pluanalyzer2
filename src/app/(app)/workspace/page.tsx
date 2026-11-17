@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export default async function WorkspacePage({
   searchParams,
 }: {
-  searchParams: Promise<{ projectId?: string }>
+  searchParams: Promise<{ projectId?: string; tab?: string }>
 }) {
   const { payload, user } = await getPayloadWithUser()
   const resolvedParams = await searchParams
@@ -47,10 +47,15 @@ export default async function WorkspacePage({
           name: p.name,
           commune: p.commune,
           codeInsee: p.codeInsee,
+          territory: p.territory,
+          status: p.status,
+          description: p.description,
         }))}
         parcels={parcelsRes.docs as unknown as ParcelRecord[]}
         snapshots={snapshotsRes.docs as unknown as SnapshotRecord[]}
         initialProjectId={resolvedParams.projectId}
+        initialTab={resolvedParams.tab}
+        userRole={user.role}
       />
     </>
   )
