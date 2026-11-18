@@ -1,35 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Building2,
-  FileText,
-  FolderKanban,
-  LogOut,
-  MapPin,
-  ShieldCheck,
-} from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Building2, FileText, FolderKanban, MapPin } from "lucide-react";
 import type { AuthUser } from "@/access/roles";
-import { logoutUser } from "@/api/auth";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ModeToggle } from "@/components/mode-toggle";
+import { UserNav } from "@/components/UserNav";
 
 export function Navbar({ user }: { user: AuthUser | null }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-
-  const logoutMutation = useMutation({
-    mutationFn: logoutUser,
-    onSuccess: () => {
-      queryClient.clear();
-      router.refresh();
-    },
-  });
 
   const navItems = [
     { href: "/", label: "Projets", icon: FolderKanban },
@@ -87,43 +68,13 @@ export function Navbar({ user }: { user: AuthUser | null }) {
         </div>
 
         <div className="flex items-center gap-3">
-          <ModeToggle />
-
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/admin">
-              <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-              Payload Admin
-            </Link>
-          </Button>
-
           {user && (
             <>
+              <UserNav user={user} />
               <Separator orientation="vertical" className="h-6" />
-              <div className="flex items-center gap-3">
-                <div className="hidden text-right sm:block">
-                  <div className="text-xs font-semibold text-foreground">
-                    {user.fullName || user.email}
-                  </div>
-                  <Badge
-                    variant="secondary"
-                    className="mt-0.5 px-1.5 py-0 text-[10px] uppercase"
-                  >
-                    {user.role}
-                  </Badge>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => logoutMutation.mutate()}
-                  disabled={logoutMutation.isPending}
-                  title="Déconnexion"
-                  className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </div>
             </>
           )}
+          <ModeToggle />
         </div>
       </div>
     </header>

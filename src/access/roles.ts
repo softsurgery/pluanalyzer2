@@ -8,6 +8,7 @@ export interface AuthUser {
   role?: UserRole
   fullName?: string
   organization?: string
+  territoryFocus?: string
 }
 
 export const isAuthenticated: Access = ({ req: { user } }) => Boolean(user)
