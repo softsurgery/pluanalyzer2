@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCreateProjectFormStructure } from "@/hooks/forms/useCreateProjectFormStructure";
 import { useProjectStore } from "@/hooks/stores/useProjectStore";
 import { createProjectSchema, validateForm } from "@/validations";
@@ -129,25 +130,40 @@ export function DashboardClient() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {kpiCards.map((kpi) => {
-          const Icon = kpi.icon;
-          return (
-            <Card key={kpi.label}>
-              <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-                <CardDescription className="text-xs font-semibold uppercase tracking-wide">
-                  {kpi.label}
-                </CardDescription>
-                <Icon className={`h-4 w-4 ${kpi.iconColor}`} />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-foreground">
-                  {statsQuery.isLoading ? "—" : kpi.value}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+      <div
+        className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+        aria-busy={statsQuery.isLoading || undefined}
+      >
+        {statsQuery.isLoading
+          ? Array.from({ length: 4 }).map((_, idx) => (
+              <Card key={idx}>
+                <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-4 w-4 rounded" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-9 w-16" />
+                </CardContent>
+              </Card>
+            ))
+          : kpiCards.map((kpi) => {
+              const Icon = kpi.icon;
+              return (
+                <Card key={kpi.label}>
+                  <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+                    <CardDescription className="text-xs font-semibold uppercase tracking-wide">
+                      {kpi.label}
+                    </CardDescription>
+                    <Icon className={`h-4 w-4 ${kpi.iconColor}`} />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-foreground">
+                      {kpi.value}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
       </div>
 
       {/* Create Project Drawer */}
@@ -202,12 +218,32 @@ export function DashboardClient() {
       <div className="space-y-4">
         <h2 className="text-lg font-bold text-foreground">Projets actifs</h2>
         {projectsQuery.isLoading ? (
-          <Card>
-            <CardContent className="flex items-center justify-center gap-2 p-10 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Chargement des projets...
-            </CardContent>
-          </Card>
+          <div
+            className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+            aria-busy="true"
+            aria-label="Chargement des projets"
+          >
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <Card key={idx} className="flex flex-col justify-between">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Skeleton className="h-5 w-24 rounded-full" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                  <Skeleton className="mt-2 h-5 w-3/4" />
+                  <Skeleton className="mt-1 h-3.5 w-1/2" />
+                </CardHeader>
+                <CardContent className="space-y-1.5 pt-0">
+                  <Skeleton className="h-3.5 w-full" />
+                  <Skeleton className="h-3.5 w-5/6" />
+                </CardContent>
+                <CardFooter className="mt-auto justify-between border-t pt-3">
+                  <Skeleton className="h-3.5 w-24" />
+                  <Skeleton className="h-3.5 w-28" />
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
         ) : projectsQuery.isError ? (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />

@@ -23,9 +23,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export interface SettingsTabProps {
   currentProject: ProjectItem | null;
+  isLoading?: boolean;
   userRole?: string;
   canDeleteProject: boolean;
   isDeleting: boolean;
@@ -35,12 +37,48 @@ export interface SettingsTabProps {
 
 export function SettingsTab({
   currentProject,
+  isLoading = false,
   userRole,
   canDeleteProject,
   isDeleting,
   deleteError,
   onDeleteProject,
 }: SettingsTabProps) {
+  if (isLoading) {
+    return (
+      <div
+        className="space-y-6"
+        aria-busy="true"
+        aria-label="Chargement des paramètres du projet"
+      >
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-44" />
+            <Skeleton className="h-3.5 w-72" />
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="space-y-2">
+                <Skeleton className="h-3.5 w-20" />
+                <Skeleton className="h-5 w-32" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-3.5 w-96 max-w-full" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-16 w-full rounded-lg" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!currentProject) {
     return (
       <Card>

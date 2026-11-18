@@ -472,11 +472,15 @@ export function WorkspaceClient({
           <ConstructibilityTab
             mapPreview={mapPreview}
             activeSnapshot={activeSnapshot}
+            isLoading={snapshotsQuery.isLoading}
           />
         </TabsContent>
 
         <TabsContent value="regulations">
-          <RegulationsTab activeSnapshot={activeSnapshot} />
+          <RegulationsTab
+            activeSnapshot={activeSnapshot}
+            isLoading={snapshotsQuery.isLoading}
+          />
         </TabsContent>
 
         <TabsContent value="history">
@@ -517,6 +521,7 @@ export function WorkspaceClient({
         <TabsContent value="settings">
           <SettingsTab
             currentProject={currentProject}
+            isLoading={projectsQuery.isLoading}
             userRole={userRole}
             canDeleteProject={canDeleteProject}
             isDeleting={deleteProjectMutation.isPending}

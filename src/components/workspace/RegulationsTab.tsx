@@ -5,12 +5,56 @@ import type { SnapshotRecord } from "@/types/analyses";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export interface RegulationsTabProps {
   activeSnapshot: SnapshotRecord | null;
+  isLoading?: boolean;
 }
 
-export function RegulationsTab({ activeSnapshot }: RegulationsTabProps) {
+export function RegulationsTab({
+  activeSnapshot,
+  isLoading = false,
+}: RegulationsTabProps) {
+  if (isLoading) {
+    return (
+      <div
+        className="grid gap-6 lg:grid-cols-2"
+        aria-busy="true"
+        aria-label="Chargement de la réglementation"
+      >
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
+            <Skeleton className="h-4 w-52" />
+            <Skeleton className="h-5 w-24 rounded-full" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <Skeleton key={idx} className="h-9 w-full rounded-lg" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <Skeleton className="h-4 w-44" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <div key={idx} className="space-y-2 rounded-lg border p-3">
+                <Skeleton className="h-3.5 w-1/2" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-5/6" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!activeSnapshot) {
     return null;
   }

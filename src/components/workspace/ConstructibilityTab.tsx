@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export interface MapPreviewState {
   centroid?: { lng?: number | null; lat?: number | null } | null;
@@ -21,11 +22,13 @@ export interface MapPreviewState {
 export interface ConstructibilityTabProps {
   mapPreview: MapPreviewState;
   activeSnapshot: SnapshotRecord | null;
+  isLoading?: boolean;
 }
 
 export function ConstructibilityTab({
   mapPreview,
   activeSnapshot,
+  isLoading = false,
 }: ConstructibilityTabProps) {
   const calc = (activeSnapshot?.constructibilityCalculations || {}) as Record<
     string,
@@ -88,41 +91,78 @@ export function ConstructibilityTab({
           parcelLabel={mapPreview.label}
           zoneCode={activeSnapshot?.zoneCode || mapPreview.zoneCode}
         />
-        {activeSnapshot && (
-          <Card>
+        {isLoading ? (
+          <Card aria-busy="true" aria-label="Chargement du résumé d'analyse">
             <CardHeader className="p-4 pb-1">
-              <CardTitle className="text-xs font-bold">
-                {activeSnapshot.snapshotLabel}
-              </CardTitle>
+              <Skeleton className="h-4 w-40" />
             </CardHeader>
-            <CardContent className="p-4 pt-0">
-              <p className="text-xs text-muted-foreground">
-                {activeSnapshot.originalPrompt}
-              </p>
+            <CardContent className="space-y-1.5 p-4 pt-1">
+              <Skeleton className="h-3.5 w-full" />
+              <Skeleton className="h-3.5 w-4/5" />
             </CardContent>
           </Card>
+        ) : (
+          activeSnapshot && (
+            <Card>
+              <CardHeader className="p-4 pb-1">
+                <CardTitle className="text-xs font-bold">
+                  {activeSnapshot.snapshotLabel}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <p className="text-xs text-muted-foreground">
+                  {activeSnapshot.originalPrompt}
+                </p>
+              </CardContent>
+            </Card>
+          )
         )}
       </div>
 
       <div className="space-y-4 lg:col-span-7">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {kpis.map((kpi) => (
-            <Card key={kpi.label}>
-              <CardHeader className="p-4 pb-1">
-                <CardDescription className="text-[11px] font-semibold uppercase tracking-wide">
-                  {kpi.label}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-lg font-bold text-foreground">
-                  {kpi.value}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <div
+          className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+          aria-busy={isLoading || undefined}
+        >
+          {isLoading
+            ? kpis.map((kpi) => (
+                <Card key={kpi.label}>
+                  <CardHeader className="p-4 pb-1">
+                    <Skeleton className="h-3.5 w-24" />
+                  </CardHeader>
+                  <CardContent className="p-4 pt-1">
+                    <Skeleton className="h-6 w-20" />
+                  </CardContent>
+                </Card>
+              ))
+            : kpis.map((kpi) => (
+                <Card key={kpi.label}>
+                  <CardHeader className="p-4 pb-1">
+                    <CardDescription className="text-[11px] font-semibold uppercase tracking-wide">
+                      {kpi.label}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <div className="text-lg font-bold text-foreground">
+                      {kpi.value}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
         </div>
 
-        {interp.summary ? (
+        {isLoading ? (
+          <Card aria-busy="true" aria-label="Chargement de la synthèse">
+            <CardHeader className="pb-2">
+              <Skeleton className="h-4 w-44" />
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Skeleton className="h-3.5 w-full" />
+              <Skeleton className="h-3.5 w-11/12" />
+              <Skeleton className="h-3.5 w-4/5" />
+            </CardContent>
+          </Card>
+        ) : interp.summary ? (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-xs font-bold uppercase tracking-wide text-muted-foreground">

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useUploadDocumentFormStructure } from "@/hooks/forms/useUploadDocumentFormStructure";
 import { useDocumentStore } from "@/hooks/stores/useDocumentStore";
 import { uploadDocumentSchema, validateForm } from "@/validations";
@@ -166,12 +167,32 @@ export function DocumentsClient() {
             Documents ({documents.length})
           </h2>
           {documentsQuery.isLoading ? (
-            <Card>
-              <CardContent className="flex items-center justify-center gap-2 p-8 text-xs text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Chargement des documents...
-              </CardContent>
-            </Card>
+            <div
+              className="space-y-3"
+              aria-busy="true"
+              aria-label="Chargement des documents"
+            >
+              {Array.from({ length: 3 }).map((_, idx) => (
+                <Card key={idx}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-1 items-start gap-3">
+                        <Skeleton className="mt-0.5 h-5 w-5 shrink-0 rounded" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-2/3" />
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Skeleton className="h-3.5 w-16" />
+                            <Skeleton className="h-3.5 w-20" />
+                            <Skeleton className="h-4 w-16 rounded-full" />
+                          </div>
+                        </div>
+                      </div>
+                      <Skeleton className="h-8 w-28 shrink-0 rounded-md" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           ) : documents.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="p-8 text-center text-xs text-muted-foreground">
