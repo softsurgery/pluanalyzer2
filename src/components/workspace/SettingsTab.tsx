@@ -1,6 +1,13 @@
 "use client";
 
-import { AlertCircle, AlertTriangle, Loader2, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  Download,
+  Loader2,
+  Trash2,
+} from "lucide-react";
+import type { SnapshotRecord } from "@/types/analyses";
 import type { ProjectItem } from "@/types/projects";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -27,6 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export interface SettingsTabProps {
   currentProject: ProjectItem | null;
+  activeSnapshot: SnapshotRecord | null;
   isLoading?: boolean;
   userRole?: string;
   canDeleteProject: boolean;
@@ -37,6 +45,7 @@ export interface SettingsTabProps {
 
 export function SettingsTab({
   currentProject,
+  activeSnapshot,
   isLoading = false,
   userRole,
   canDeleteProject,
@@ -63,6 +72,17 @@ export function SettingsTab({
                 <Skeleton className="h-5 w-32" />
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-36" />
+            <Skeleton className="h-3.5 w-80 max-w-full" />
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Skeleton className="h-8 w-36 rounded-md" />
+            <Skeleton className="h-8 w-32 rounded-md" />
           </CardContent>
         </Card>
 
@@ -145,6 +165,33 @@ export function SettingsTab({
             </div>
           )}
         </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Export de l&apos;analyse</CardTitle>
+          <CardDescription className="text-xs">
+            {activeSnapshot
+              ? `Téléchargez les données de l'analyse active (${activeSnapshot.snapshotLabel}) au format Archicad ou Markdown.`
+              : "Aucune analyse sélectionnée. Lancez ou ouvrez une analyse pour exporter les données."}
+          </CardDescription>
+        </CardHeader>
+        {activeSnapshot && (
+          <CardContent className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <a href={`/api/plu/export/${activeSnapshot.id}?format=archicad`}>
+                <Download className="h-3.5 w-3.5 text-primary" />
+                Export Archicad
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <a href={`/api/plu/export/${activeSnapshot.id}?format=markdown`}>
+                <Download className="h-3.5 w-3.5 text-emerald-600" />
+                Rapport MD
+              </a>
+            </Button>
+          </CardContent>
+        )}
       </Card>
 
       <Card className="border-destructive/40">

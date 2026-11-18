@@ -7,7 +7,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Code2,
-  Download,
   FileText,
   GitCompare,
   History,
@@ -28,7 +27,6 @@ import {
 import { fetchParcels, lookupParcel, parcelKeys } from "@/api/parcels";
 import { deleteProject, fetchProjects, projectKeys } from "@/api/projects";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnalysisTab } from "@/components/workspace/AnalysisTab";
 import { useAnalysisStore } from "@/hooks/stores/useAnalysisStore";
@@ -377,59 +375,36 @@ export function WorkspaceClient({
         value={activeTab}
         onValueChange={(v) => handleTabChange(v as TabKey)}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <TabsList>
-            <TabsTrigger value="analysis">
-              <Search className="h-3.5 w-3.5" />
-              Analyse & Parcelle
-            </TabsTrigger>
-            <TabsTrigger value="constructibility">
-              <Layers className="h-3.5 w-3.5" />
-              Constructibilité & Carte
-            </TabsTrigger>
-            <TabsTrigger value="regulations">
-              <FileText className="h-3.5 w-3.5" />
-              Réglementation & Validation
-            </TabsTrigger>
-            <TabsTrigger value="history">
-              <History className="h-3.5 w-3.5" />
-              Historique ({snapshots.length})
-            </TabsTrigger>
-            <TabsTrigger value="compare">
-              <GitCompare className="h-3.5 w-3.5" />
-              Comparaison
-            </TabsTrigger>
-            <TabsTrigger value="json">
-              <Code2 className="h-3.5 w-3.5" />
-              Inspecteur JSON
-            </TabsTrigger>
-            <TabsTrigger value="settings">
-              <Settings className="h-3.5 w-3.5" />
-              Paramètres
-            </TabsTrigger>
-          </TabsList>
-
-          {activeSnapshot && (
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" asChild>
-                <a
-                  href={`/api/plu/export/${activeSnapshot.id}?format=archicad`}
-                >
-                  <Download className="h-3.5 w-3.5 text-primary" />
-                  Export Archicad
-                </a>
-              </Button>
-              <Button variant="outline" size="sm" asChild>
-                <a
-                  href={`/api/plu/export/${activeSnapshot.id}?format=markdown`}
-                >
-                  <Download className="h-3.5 w-3.5 text-emerald-600" />
-                  Rapport MD
-                </a>
-              </Button>
-            </div>
-          )}
-        </div>
+        <TabsList>
+          <TabsTrigger value="analysis">
+            <Search className="h-3.5 w-3.5" />
+            Analyse & Parcelle
+          </TabsTrigger>
+          <TabsTrigger value="constructibility">
+            <Layers className="h-3.5 w-3.5" />
+            Constructibilité & Carte
+          </TabsTrigger>
+          <TabsTrigger value="regulations">
+            <FileText className="h-3.5 w-3.5" />
+            Réglementation & Validation
+          </TabsTrigger>
+          <TabsTrigger value="history">
+            <History className="h-3.5 w-3.5" />
+            Historique ({snapshots.length})
+          </TabsTrigger>
+          <TabsTrigger value="compare">
+            <GitCompare className="h-3.5 w-3.5" />
+            Comparaison
+          </TabsTrigger>
+          <TabsTrigger value="json">
+            <Code2 className="h-3.5 w-3.5" />
+            Inspecteur JSON
+          </TabsTrigger>
+          <TabsTrigger value="settings">
+            <Settings className="h-3.5 w-3.5" />
+            Paramètres
+          </TabsTrigger>
+        </TabsList>
 
         <TabsContent value="analysis">
           <AnalysisTab
@@ -521,6 +496,7 @@ export function WorkspaceClient({
         <TabsContent value="settings">
           <SettingsTab
             currentProject={currentProject}
+            activeSnapshot={activeSnapshot}
             isLoading={projectsQuery.isLoading}
             userRole={userRole}
             canDeleteProject={canDeleteProject}
