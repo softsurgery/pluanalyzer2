@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { ThemeProvider } from '@/contexts/ThemeProvider'
 import { QueryProvider } from '@/contexts/QueryProvider'
+import { FooterProvider } from '@/contexts/FooterProvider'
 
 export const metadata: Metadata = {
   title: 'PLU Analyzer — Urban-Planning Feasibility Platform',
@@ -19,7 +20,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           enableSystem
           disableTransitionOnChange
         >
-          <QueryProvider>{children}</QueryProvider>
+          <QueryProvider>
+            <FooterProvider>{children}</FooterProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

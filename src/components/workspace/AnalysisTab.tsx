@@ -1,7 +1,8 @@
 "use client";
 
 import type React from "react";
-import { Loader2, Play } from "lucide-react";
+import { useEffect } from "react";
+import { Loader2, Play, Search } from "lucide-react";
 import type { AIModelRecord } from "@/api/ai-models";
 import type { AddressSuggestion } from "@/api/parcels";
 import type { MarkerCoordinates } from "@/components/MarkerPicker";
@@ -14,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useFooter } from "@/contexts/FooterProvider";
 import { useAnalysisFormStructure } from "@/hooks/forms/useAnalysisFormStructure";
 import { useAnalysisStore } from "@/hooks/stores/useAnalysisStore";
 import type { ParcelRecord } from "@/types/parcels";
@@ -36,6 +38,8 @@ export interface AnalysisTabProps {
   isRunningAnalysis: boolean;
 }
 
+const ANALYSIS_FORM_ID = "plu-analysis-form";
+
 export function AnalysisTab({
   projects,
   parcels,
@@ -51,8 +55,12 @@ export function AnalysisTab({
   isRunningAnalysis,
 }: AnalysisTabProps) {
   const analysisStore = useAnalysisStore();
+  const { setContent, clearContent } = useFooter();
   const { projectId, locationMode, pickedLocation } = analysisStore.createDto;
   const isMapMode = locationMode === "map";
+  const lookupDisabled = isLookingUpParcel || (isMapMode && !pickedLocation);
+  const analyzeDisabled =
+    isRunningAnalysis || !projectId || (isMapMode && !pickedLocation);
 
   const { analysisFormStructure } = useAnalysisFormStructure({
     analysisStore,
@@ -64,9 +72,52 @@ export function AnalysisTab({
     onAddressSelect,
     onParcelSelect,
     onPickedLocationChange,
-    onLookupParcel,
-    isLookingUpParcel,
   });
+
+  useEffect(() => {
+    setContent?.(
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onLookupParcel}
+          disabled={lookupDisabled}
+        >
+          {isLookingUpParcel ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Search className="h-4 w-4 text-primary" />
+          )}
+          Localiser IGN
+        </Button>
+
+        <Button
+          type="submit"
+          form={ANALYSIS_FORM_ID}
+          disabled={analyzeDisabled}
+        >
+          {isRunningAnalysis ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Play className="h-4 w-4" />
+          )}
+          Analyser PLU
+        </Button>
+      </>,
+    );
+
+    return () => {
+      clearContent?.();
+    };
+  }, [
+    setContent,
+    clearContent,
+    onLookupParcel,
+    lookupDisabled,
+    isLookingUpParcel,
+    analyzeDisabled,
+    isRunningAnalysis,
+  ]);
 
   return (
     <Card className="rounded-2xl">
@@ -78,26 +129,8 @@ export function AnalysisTab({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={onSubmit} className="space-y-5">
+        <form id={ANALYSIS_FORM_ID} onSubmit={onSubmit} className="space-y-5">
           <FormBuilder structure={analysisFormStructure} />
-
-          <div className="flex justify-end">
-            <Button
-              type="submit"
-              disabled={
-                isRunningAnalysis ||
-                !projectId ||
-                (isMapMode && !pickedLocation)
-              }
-            >
-              {isRunningAnalysis ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              Analyser PLU
-            </Button>
-          </div>
         </form>
       </CardContent>
     </Card>

@@ -1,4 +1,4 @@
-import { Loader2, MapPin, Search } from "lucide-react";
+import { MapPin } from "lucide-react";
 import type { AIModelRecord } from "@/api/ai-models";
 import { fetchAddressSuggestions, type AddressSuggestion } from "@/api/parcels";
 import {
@@ -14,7 +14,6 @@ import {
   TextareaFieldProps,
   TextFieldProps,
 } from "@/components/shared/form-builder";
-import { Button } from "@/components/ui/button";
 import { InteractiveSelect } from "@/components/ui/interactive-select";
 import type { LocationInputMode } from "@/components/workspace/AnalysisTab";
 import { AnalysisStore } from "@/hooks/stores/useAnalysisStore";
@@ -57,8 +56,6 @@ interface AnalysisFormStructureProps {
   onAddressSelect?: (suggestion: AddressSuggestion) => void;
   onParcelSelect?: (parcelId: string, parcel?: ParcelRecord) => void;
   onPickedLocationChange?: (coords: MarkerCoordinates) => void;
-  onLookupParcel: () => void;
-  isLookingUpParcel: boolean;
 }
 
 export const useAnalysisFormStructure = ({
@@ -71,14 +68,11 @@ export const useAnalysisFormStructure = ({
   onAddressSelect,
   onParcelSelect,
   onPickedLocationChange,
-  onLookupParcel,
-  isLookingUpParcel,
 }: AnalysisFormStructureProps) => {
   const { locationMode, pickedLocation } = analysisStore.createDto;
   const isAddressMode = locationMode === "address";
   const isParcelMode = locationMode === "parcel";
   const isMapMode = locationMode === "map";
-  const lookupDisabled = isLookingUpParcel || (isMapMode && !pickedLocation);
 
   const projectField: Field<SelectFieldProps> = {
     id: "ws-project",
@@ -243,31 +237,6 @@ export const useAnalysisFormStructure = ({
     },
   };
 
-  const lookupField: Field<CustomFieldProps> = {
-    id: "ws-lookup",
-    label: "Recherche cadastrale",
-    variant: FieldVariant.CUSTOM,
-    description: "Interroge IGN API Carto & Géoportail de l'Urbanisme.",
-    props: {
-      children: (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onLookupParcel}
-          disabled={lookupDisabled}
-          className="w-full"
-        >
-          {isLookingUpParcel ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Search className="h-4 w-4 text-primary" />
-          )}
-          Localiser IGN
-        </Button>
-      ),
-    },
-  };
-
   const mapField: Field<CustomFieldProps> = {
     id: "ws-map",
     label: "Sélection directe sur la carte",
@@ -347,7 +316,7 @@ export const useAnalysisFormStructure = ({
         rows: [
           { fields: [projectField] },
           { fields: [locationModeField] },
-          { fields: [addressField, iduField, parcelField, lookupField] },
+          { fields: [addressField, iduField, parcelField] },
           { fields: [mapField] },
           { fields: [aiModelField] },
           { fields: [promptField] },
