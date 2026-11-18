@@ -1,5 +1,10 @@
 import type { PaginatedResponse } from '@/types/common'
-import type { CreateProjectInput, DashboardStats, ProjectItem } from '@/types/projects'
+import type {
+  CreateProjectInput,
+  DashboardStats,
+  ProjectItem,
+  UpdateProjectInput,
+} from '@/types/projects'
 import { apiFetch } from '@/api/client'
 
 export const projectKeys = {
@@ -38,6 +43,17 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectI
       ...input,
       status: input.status ?? 'active',
     }),
+  })
+}
+
+export async function updateProject(
+  id: number | string,
+  input: UpdateProjectInput,
+): Promise<ProjectItem> {
+  return apiFetch<ProjectItem>(`/api/projects/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
   })
 }
 

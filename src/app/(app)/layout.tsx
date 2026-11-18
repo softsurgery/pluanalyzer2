@@ -3,6 +3,7 @@ import './globals.css'
 import { ThemeProvider } from '@/contexts/ThemeProvider'
 import { QueryProvider } from '@/contexts/QueryProvider'
 import { FooterProvider } from '@/contexts/FooterProvider'
+import { Toaster } from '@/components/ui/sonner'
 
 export const metadata: Metadata = {
   title: 'PLU Analyzer — Urban-Planning Feasibility Platform',
@@ -23,6 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <QueryProvider>
             <FooterProvider>{children}</FooterProvider>
           </QueryProvider>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

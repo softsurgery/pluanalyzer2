@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getPayloadWithUser } from '@/lib/payload-auth'
+import { buildPluPdfReport } from '@/lib/pdf-report'
 
 export async function GET(
   request: Request,
@@ -27,6 +28,30 @@ export async function GET(
         headers: {
           'Content-Type': 'application/json',
           'Content-Disposition': `attachment; filename="archicad-plu-snapshot-${snapshotId}.json"`,
+        },
+      })
+    }
+
+    if (format === 'pdf') {
+      const calc = (snapshot.constructibilityCalculations || {}) as Record<string, unknown>
+      const interp = (snapshot.regulatoryInterpretation || {}) as Record<string, unknown>
+      const projectName =
+        typeof snapshot.project === 'object' &&
+        snapshot.project !== null &&
+        'name' in snapshot.project
+          ? String(snapshot.project.name)
+          : 'Projet PLU'
+      const pdfBuffer = buildPluPdfReport({
+        projectName,
+        summary: typeof interp.summary === 'string' ? interp.summary : null,
+        calculations: calc,
+      })
+
+      return new NextResponse(new Uint8Array(pdfBuffer), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="plu-report-snapshot-${snapshotId}.pdf"`,
         },
       })
     }

@@ -498,6 +498,7 @@ export function WorkspaceClient({
             currentProject={currentProject}
             activeSnapshot={activeSnapshot}
             isLoading={projectsQuery.isLoading}
+            isSnapshotLoading={snapshotsQuery.isLoading}
             userRole={userRole}
             canDeleteProject={canDeleteProject}
             isDeleting={deleteProjectMutation.isPending}

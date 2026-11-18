@@ -18,6 +18,11 @@ export interface CreateProjectInput {
   status?: string
 }
 
+export interface UpdateProjectInput {
+  name: string
+  description?: string
+}
+
 export interface DashboardStats {
   projects: number
   analyses: number

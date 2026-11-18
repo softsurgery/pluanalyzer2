@@ -9,9 +9,16 @@ export interface CreateProjectDto {
   description: string;
 }
 
+export interface UpdateProjectDto {
+  name: string;
+  description: string;
+}
+
 interface ProjectStoreData {
   createDto: CreateProjectDto;
   createDtoErrors: Record<string, string[]>;
+  updateDto: UpdateProjectDto;
+  updateDtoErrors: Record<string, string[]>;
 }
 
 export interface ProjectStore extends ProjectStoreData {
@@ -29,6 +36,11 @@ const initialState: ProjectStoreData = {
     description: "",
   },
   createDtoErrors: {},
+  updateDto: {
+    name: "",
+    description: "",
+  },
+  updateDtoErrors: {},
 };
 
 export const useProjectStore = create<ProjectStore>((set) => ({
