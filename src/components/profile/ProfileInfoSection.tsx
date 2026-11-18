@@ -1,20 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMutation } from '@tanstack/react-query'
 import {
   AlertCircle,
-  Building2,
   CheckCircle2,
   Loader2,
-  MapPin,
   Save,
-  Shield,
   User as UserIcon,
 } from 'lucide-react'
 import type { AuthUser } from '@/access/roles'
 import { updateUserProfile } from '@/api/auth'
+import { FormBuilder } from '@/components/shared/form-builder'
 import { getRoleLabel } from '@/lib/user-display'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -25,25 +23,38 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { useProfileInfoFormStructure } from '@/hooks/forms/useProfileInfoFormStructure'
+import { useProfileStore } from '@/hooks/stores/useProfileStore'
+import { updateProfileSchema, validateForm } from '@/validations'
 
 export function ProfileInfoSection({ user }: { user: AuthUser }) {
   const router = useRouter()
-
-  const [fullName, setFullName] = useState(user.fullName ?? '')
-  const [email, setEmail] = useState(user.email ?? '')
-  const [organization, setOrganization] = useState(user.organization ?? '')
-  const [territoryFocus, setTerritoryFocus] = useState(user.territoryFocus ?? '')
+  const profileStore = useProfileStore()
   const [profileSaved, setProfileSaved] = useState(false)
+
+  useEffect(() => {
+    profileStore.set('updateDto', {
+      fullName: user.fullName ?? '',
+      email: user.email ?? '',
+      organization: user.organization ?? '',
+      territoryFocus: user.territoryFocus ?? '',
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.id, user.fullName, user.email, user.organization, user.territoryFocus])
+
+  const { profileInfoFormStructure } = useProfileInfoFormStructure({
+    profileStore,
+    roleLabel: getRoleLabel(user.role),
+    onFieldChange: () => setProfileSaved(false),
+  })
 
   const profileMutation = useMutation({
     mutationFn: () =>
       updateUserProfile(user.id, {
-        fullName: fullName.trim(),
-        email: email.trim(),
-        organization: organization.trim(),
-        territoryFocus: territoryFocus.trim(),
+        fullName: profileStore.updateDto.fullName.trim(),
+        email: profileStore.updateDto.email.trim(),
+        organization: profileStore.updateDto.organization.trim(),
+        territoryFocus: profileStore.updateDto.territoryFocus.trim(),
       }),
     onSuccess: () => {
       setProfileSaved(true)
@@ -54,6 +65,12 @@ export function ProfileInfoSection({ user }: { user: AuthUser }) {
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setProfileSaved(false)
+    const result = validateForm(updateProfileSchema, profileStore.updateDto)
+    if (!result.success) {
+      profileStore.set('updateDtoErrors', result.errors)
+      return
+    }
+    profileStore.set('updateDtoErrors', {})
     profileMutation.mutate()
   }
 
@@ -70,76 +87,7 @@ export function ProfileInfoSection({ user }: { user: AuthUser }) {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleProfileSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-fullname">Nom complet</Label>
-            <Input
-              id="profile-fullname"
-              required
-              value={fullName}
-              onChange={(e) => {
-                setFullName(e.target.value)
-                setProfileSaved(false)
-              }}
-              placeholder="Jean Dupont"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-email">Adresse email</Label>
-            <Input
-              id="profile-email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value)
-                setProfileSaved(false)
-              }}
-              placeholder="nom@organisation.fr"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-org" className="flex items-center gap-1.5">
-              <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-              Organisation
-            </Label>
-            <Input
-              id="profile-org"
-              value={organization}
-              onChange={(e) => {
-                setOrganization(e.target.value)
-                setProfileSaved(false)
-              }}
-              placeholder="Métropole Aix-Marseille-Provence"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-territory" className="flex items-center gap-1.5">
-              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-              Territoire de référence
-            </Label>
-            <Input
-              id="profile-territory"
-              value={territoryFocus}
-              onChange={(e) => {
-                setTerritoryFocus(e.target.value)
-                setProfileSaved(false)
-              }}
-              placeholder="Aix-Marseille-Provence"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="flex items-center gap-1.5">
-              <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-              Rôle
-            </Label>
-            <div className="flex h-9 items-center rounded-lg border bg-muted/50 px-3 text-sm text-muted-foreground">
-              {getRoleLabel(user.role)}
-            </div>
-          </div>
+          <FormBuilder structure={profileInfoFormStructure} />
 
           {profileMutation.isError && (
             <Alert variant="destructive">

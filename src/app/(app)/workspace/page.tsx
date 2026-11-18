@@ -1,6 +1,6 @@
 import { getPayloadWithUser } from "@/lib/payload-auth";
 import { Navbar } from "@/components/layout/Navbar";
-import { LoginPanel } from "@/components/LoginPanel";
+import { LoginPanel } from "@/components/auth/LoginPanel";
 import { WorkspaceClient } from "@/components/WorkspaceClient";
 
 export const dynamic = "force-dynamic";

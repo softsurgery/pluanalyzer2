@@ -1,7 +1,7 @@
 import React from "react";
 import { getPayloadWithUser } from "@/lib/payload-auth";
 import { Navbar } from "@/components/layout/Navbar";
-import { LoginPanel } from "@/components/LoginPanel";
+import { LoginPanel } from "@/components/auth/LoginPanel";
 import { ProfileShell } from "@/components/profile/ProfileShell";
 
 export const dynamic = "force-dynamic";

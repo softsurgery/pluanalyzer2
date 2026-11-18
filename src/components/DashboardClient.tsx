@@ -19,6 +19,7 @@ import {
   fetchProjects,
   projectKeys,
 } from "@/api/projects";
+import { FormBuilder } from "@/components/shared/form-builder";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,26 +29,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useCreateProjectFormStructure } from "@/hooks/forms/useCreateProjectFormStructure";
+import { useProjectStore } from "@/hooks/stores/useProjectStore";
+import { createProjectSchema, validateForm } from "@/validations";
 
 export function DashboardClient() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [name, setName] = useState("");
-  const [commune, setCommune] = useState("Aix-en-Provence");
-  const [codeInsee, setCodeInsee] = useState("13001");
-  const [territory, setTerritory] = useState<"amp" | "gpu">("amp");
-  const [description, setDescription] = useState("");
+  const projectStore = useProjectStore();
+  const { createProjectFormStructure } = useCreateProjectFormStructure({
+    projectStore,
+  });
 
   const projectsQuery = useQuery({
     queryKey: projectKeys.list(24),
@@ -60,17 +54,9 @@ export function DashboardClient() {
   });
 
   const createProjectMutation = useMutation({
-    mutationFn: () =>
-      createProject({
-        name,
-        commune,
-        codeInsee,
-        territory,
-        description,
-      }),
+    mutationFn: () => createProject(projectStore.createDto),
     onSuccess: async () => {
-      setName("");
-      setDescription("");
+      projectStore.reset();
       setShowForm(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: projectKeys.all }),
@@ -81,6 +67,12 @@ export function DashboardClient() {
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
+    const result = validateForm(createProjectSchema, projectStore.createDto);
+    if (!result.success) {
+      projectStore.set("createDtoErrors", result.errors);
+      return;
+    }
+    projectStore.set("createDtoErrors", {});
     createProjectMutation.mutate();
   };
 
@@ -127,10 +119,6 @@ export function DashboardClient() {
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
             Tableau de bord — Études de Faisabilité PLU
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Métropole Aix-Marseille-Provence & Géoportail de l&apos;Urbanisme ·
-            Traçabilité historique complète sur Payload CMS
-          </p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={() => setShowForm((v) => !v)}>
@@ -178,62 +166,7 @@ export function DashboardClient() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreate} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="proj-name">Nom du projet *</Label>
-                  <Input
-                    id="proj-name"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Ex: Îlot Joliette — Bureaux & Logements"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="proj-commune">Commune *</Label>
-                  <Input
-                    id="proj-commune"
-                    required
-                    value={commune}
-                    onChange={(e) => setCommune(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="proj-insee">Code INSEE *</Label>
-                  <Input
-                    id="proj-insee"
-                    required
-                    value={codeInsee}
-                    onChange={(e) => setCodeInsee(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="proj-territory">Territoire</Label>
-                  <Select
-                    value={territory}
-                    onValueChange={(v) => setTerritory(v as "amp" | "gpu")}
-                  >
-                    <SelectTrigger id="proj-territory">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="amp">
-                        Métropole Aix-Marseille-Provence
-                      </SelectItem>
-                      <SelectItem value="gpu">National GPU</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5 sm:col-span-3">
-                  <Label htmlFor="proj-desc">Description</Label>
-                  <Input
-                    id="proj-desc"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Contexte urbain, programme envisagé..."
-                  />
-                </div>
-              </div>
+              <FormBuilder structure={createProjectFormStructure} />
 
               {createProjectMutation.isError && (
                 <Alert variant="destructive">

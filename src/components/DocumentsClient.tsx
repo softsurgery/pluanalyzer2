@@ -11,27 +11,18 @@ import {
   uploadDocument,
 } from "@/api/documents";
 import { fetchProjects, projectKeys } from "@/api/projects";
+import { FormBuilder } from "@/components/shared/form-builder";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useUploadDocumentFormStructure } from "@/hooks/forms/useUploadDocumentFormStructure";
+import { useDocumentStore } from "@/hooks/stores/useDocumentStore";
+import { uploadDocumentSchema, validateForm } from "@/validations";
 
 export function DocumentsClient() {
   const queryClient = useQueryClient();
-  const [title, setTitle] = useState("");
-  const [zoneCode, setZoneCode] = useState("UA");
-  const [codeInsee, setCodeInsee] = useState("13001");
-  const [projectId, setProjectId] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const documentStore = useDocumentStore();
   const [selectedDoc, setSelectedDoc] = useState<DocumentItem | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -48,11 +39,16 @@ export function DocumentsClient() {
   const documents = documentsQuery.data?.docs ?? [];
   const projects = projectsQuery.data?.docs ?? [];
 
+  const { uploadDocumentFormStructure } = useUploadDocumentFormStructure({
+    documentStore,
+    projects,
+  });
+
   useEffect(() => {
-    if (!projectId && projects.length > 0) {
-      setProjectId(String(projects[0].id));
+    if (!documentStore.createDto.projectId && projects.length > 0) {
+      documentStore.setNested("createDto.projectId", String(projects[0].id));
     }
-  }, [projectId, projects]);
+  }, [documentStore, projects]);
 
   useEffect(() => {
     if (!selectedDoc && documents.length > 0) {
@@ -62,6 +58,8 @@ export function DocumentsClient() {
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
+      const { file, title, zoneCode, codeInsee, projectId } =
+        documentStore.createDto;
       if (!file) throw new Error("Veuillez sélectionner un fichier.");
       return uploadDocument({
         file,
@@ -72,8 +70,8 @@ export function DocumentsClient() {
       });
     },
     onSuccess: async () => {
-      setTitle("");
-      setFile(null);
+      documentStore.setNested("createDto.title", "");
+      documentStore.setNested("createDto.file", null);
       setMessage("Document enregistré dans Payload CMS.");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: documentKeys.all }),
@@ -108,6 +106,12 @@ export function DocumentsClient() {
   const handleUpload = (e: React.FormEvent) => {
     e.preventDefault();
     setMessage(null);
+    const result = validateForm(uploadDocumentSchema, documentStore.createDto);
+    if (!result.success) {
+      documentStore.set("createDtoErrors", result.errors);
+      return;
+    }
+    documentStore.set("createDtoErrors", {});
     uploadMutation.mutate();
   };
 
@@ -126,63 +130,16 @@ export function DocumentsClient() {
       {/* Upload Form */}
       <Card>
         <CardContent className="p-5">
-          <form
-            onSubmit={handleUpload}
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"
-          >
-            <div className="space-y-1.5 lg:col-span-2">
-              <Label htmlFor="doc-title">Titre</Label>
-              <Input
-                id="doc-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Ex: Règlement Zone UA Aix-en-Provence"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="doc-zone">Zone</Label>
-              <Input
-                id="doc-zone"
-                value={zoneCode}
-                onChange={(e) => setZoneCode(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="doc-insee">Code INSEE</Label>
-              <Input
-                id="doc-insee"
-                value={codeInsee}
-                onChange={(e) => setCodeInsee(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="doc-project">Projet</Label>
-              <Select value={projectId} onValueChange={setProjectId}>
-                <SelectTrigger id="doc-project">
-                  <SelectValue placeholder="Sélectionner un projet" />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <form onSubmit={handleUpload} className="space-y-4">
+            <FormBuilder structure={uploadDocumentFormStructure} />
 
-            <div className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2 lg:col-span-5">
-              <Input
-                type="file"
-                accept=".pdf,.txt"
-                required
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className="max-w-sm cursor-pointer text-xs file:mr-3 file:rounded-md file:bg-secondary file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-secondary-foreground"
-              />
+            <div className="flex justify-end">
               <Button
                 type="submit"
                 size="sm"
-                disabled={uploadMutation.isPending || !file}
+                disabled={
+                  uploadMutation.isPending || !documentStore.createDto.file
+                }
               >
                 {uploadMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle2, KeyRound, Loader2 } from 'lucide-react'
 import { updateUserProfile } from '@/api/auth'
+import { FormBuilder } from '@/components/shared/form-builder'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,21 +14,29 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { useProfileSecurityFormStructure } from '@/hooks/forms/useProfileSecurityFormStructure'
+import { useProfileStore } from '@/hooks/stores/useProfileStore'
+import { updatePasswordSchema, validateForm } from '@/validations'
 
 export function ProfileSecuritySection({ userId }: { userId: string | number }) {
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+  const profileStore = useProfileStore()
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordSaved, setPasswordSaved] = useState(false)
+
+  const { profileSecurityFormStructure } = useProfileSecurityFormStructure({
+    profileStore,
+    onFieldChange: () => {
+      setPasswordError(null)
+      setPasswordSaved(false)
+    },
+  })
 
   const passwordMutation = useMutation({
     mutationFn: (newPassword: string) =>
       updateUserProfile(userId, { password: newPassword }),
     onSuccess: () => {
-      setPassword('')
-      setConfirmPassword('')
+      profileStore.set('passwordDto', { password: '', confirmPassword: '' })
+      profileStore.set('passwordDtoErrors', {})
       setPasswordError(null)
       setPasswordSaved(true)
     },
@@ -38,16 +47,16 @@ export function ProfileSecuritySection({ userId }: { userId: string | number }) 
     setPasswordSaved(false)
     setPasswordError(null)
 
-    if (password.length < 8) {
-      setPasswordError('Le mot de passe doit contenir au moins 8 caractères.')
-      return
-    }
-    if (password !== confirmPassword) {
-      setPasswordError('Les mots de passe ne correspondent pas.')
+    const result = validateForm(updatePasswordSchema, profileStore.passwordDto)
+    if (!result.success) {
+      profileStore.set('passwordDtoErrors', result.errors)
+      const firstError = Object.values(result.errors)[0]?.[0] ?? null
+      setPasswordError(firstError)
       return
     }
 
-    passwordMutation.mutate(password)
+    profileStore.set('passwordDtoErrors', {})
+    passwordMutation.mutate(result.data.password)
   }
 
   return (
@@ -63,41 +72,7 @@ export function ProfileSecuritySection({ userId }: { userId: string | number }) 
       </CardHeader>
       <CardContent>
         <form onSubmit={handlePasswordSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-password">Nouveau mot de passe</Label>
-            <Input
-              id="profile-password"
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value)
-                setPasswordError(null)
-                setPasswordSaved(false)
-              }}
-              placeholder="Minimum 8 caractères"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="profile-confirm-password">
-              Confirmer le mot de passe
-            </Label>
-            <Input
-              id="profile-confirm-password"
-              type="password"
-              required
-              minLength={8}
-              value={confirmPassword}
-              onChange={(e) => {
-                setConfirmPassword(e.target.value)
-                setPasswordError(null)
-                setPasswordSaved(false)
-              }}
-              placeholder="Répétez le mot de passe"
-            />
-          </div>
+          <FormBuilder structure={profileSecurityFormStructure} />
 
           {(passwordError || passwordMutation.isError) && (
             <Alert variant="destructive">

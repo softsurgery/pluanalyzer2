@@ -31,8 +31,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AnalysisTab,
-  type LocationInputMode,
 } from "@/components/workspace/AnalysisTab";
+import { useAnalysisStore } from "@/hooks/stores/useAnalysisStore";
+import { createAnalysisSchema, validateForm } from "@/validations";
 import type { MarkerCoordinates } from "@/components/MarkerPicker";
 import { CompareTab } from "@/components/workspace/CompareTab";
 import {
@@ -95,17 +96,21 @@ export function WorkspaceClient({
     null,
   );
 
-  // Form state
-  const [locationMode, setLocationMode] =
-    useState<LocationInputMode>("address");
-  const [address, setAddress] = useState("12 Avenue Sextius, Aix-en-Provence");
-  const [idu, setIdu] = useState("");
-  const [selectedParcelId, setSelectedParcelId] = useState<string>("");
-  const [pickedLocation, setPickedLocation] =
-    useState<MarkerCoordinates | null>(null);
-  const [prompt, setPrompt] = useState(
-    "Analyser la constructibilité maximale (emprise, hauteur, SDP, stationnement) pour un bâtiment mixte R+3.",
-  );
+  // Form state (Zustand)
+  const analysisStore = useAnalysisStore();
+  const {
+    locationMode,
+    address,
+    idu,
+    selectedParcelId,
+    pickedLocation,
+    prompt,
+  } = analysisStore.createDto;
+
+  useEffect(() => {
+    analysisStore.setNested("createDto.projectId", projectId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
   const [statusBanner, setStatusBanner] = useState<{
     type: "ok" | "err";
     text: string;
@@ -152,7 +157,7 @@ export function WorkspaceClient({
   useEffect(() => {
     if (parcels.length > 0 && !selectedParcelId && !mapPreview.label) {
       const p = parcels[0];
-      setSelectedParcelId(String(p.id));
+      analysisStore.setNested("createDto.selectedParcelId", String(p.id));
       setMapPreview((prev) => ({
         ...prev,
         centroid: p.centroid,
@@ -221,7 +226,9 @@ export function WorkspaceClient({
           label: `${data.parcel.idu} (${data.parcel.surfaceM2 ?? "?"} m²)`,
           zoneCode: data.gpu?.zoneCode,
         });
-        if (data.parcel.idu) setIdu(data.parcel.idu);
+        if (data.parcel.idu) {
+          analysisStore.setNested("createDto.idu", data.parcel.idu);
+        }
         setStatusBanner({
           type: "ok",
           text: `Parcelle localisée : ${data.parcel.idu} · Surface ${data.parcel.surfaceM2 ?? "?"} m² · Zone GPU : ${data.gpu?.zoneCode || "non détectée"}`,
@@ -346,8 +353,13 @@ export function WorkspaceClient({
 
   const handleRunAnalysis = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!projectId) return;
     setStatusBanner(null);
+    const result = validateForm(createAnalysisSchema, analysisStore.createDto);
+    if (!result.success) {
+      analysisStore.set("createDtoErrors", result.errors);
+      return;
+    }
+    analysisStore.set("createDtoErrors", {});
     runAnalysisMutation.mutate();
   };
 
@@ -428,13 +440,8 @@ export function WorkspaceClient({
           <AnalysisTab
             projects={projects}
             parcels={parcels}
-            projectId={projectId}
             hideProjectSelect={Boolean(initialProjectId)}
             onProjectChange={handleProjectChange}
-            locationMode={locationMode}
-            onLocationModeChange={setLocationMode}
-            address={address}
-            onAddressChange={setAddress}
             onAddressSelect={(suggestion) => {
               setMapPreview((prev) => ({
                 ...prev,
@@ -442,11 +449,7 @@ export function WorkspaceClient({
                 label: suggestion.label,
               }));
             }}
-            idu={idu}
-            onIduChange={setIdu}
-            selectedParcelId={selectedParcelId}
-            onParcelSelect={(nextId, found) => {
-              setSelectedParcelId(nextId);
+            onParcelSelect={(_nextId, found) => {
               if (found) {
                 setMapPreview({
                   centroid: found.centroid,
@@ -455,17 +458,13 @@ export function WorkspaceClient({
                 });
               }
             }}
-            pickedLocation={pickedLocation}
             onPickedLocationChange={(coords) => {
-              setPickedLocation(coords);
               setMapPreview((prev) => ({
                 ...prev,
                 centroid: coords,
                 label: `Point (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})`,
               }));
             }}
-            prompt={prompt}
-            onPromptChange={setPrompt}
             onLookupParcel={() => {
               setStatusBanner(null);
               parcelLookupMutation.mutate();
