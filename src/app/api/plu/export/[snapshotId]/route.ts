@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getPayloadWithUser } from '@/lib/payload-auth'
-import { buildPluPdfReport } from '@/lib/pdf-report'
+import { buildPluPdfReport } from '@/services/plu/pdf-report'
 
 export async function GET(
   request: Request,

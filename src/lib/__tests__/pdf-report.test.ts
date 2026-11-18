@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPluPdfReport } from '@/lib/pdf-report'
+import { buildPluPdfReport } from '@/services/plu/pdf-report'
 
 describe('buildPluPdfReport', () => {
   it('generates a valid PDF 1.4 buffer with project title, Markdown, tables, and constructibility metrics', async () => {
