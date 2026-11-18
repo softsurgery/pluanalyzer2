@@ -121,15 +121,9 @@ export function DashboardClient() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => setShowForm((v) => !v)}>
-            <FolderPlus className="h-4 w-4 text-primary" />
+          <Button onClick={() => setShowForm((v) => !v)}>
+            <FolderPlus className="h-4 w-4" />
             Nouveau projet
-          </Button>
-          <Button asChild>
-            <Link href="/workspace">
-              Lancer une analyse PLU
-              <ArrowRight className="h-4 w-4" />
-            </Link>
           </Button>
         </div>
       </div>

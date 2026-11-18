@@ -30,12 +30,9 @@ import { deleteProject, fetchProjects, projectKeys } from "@/api/projects";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  AnalysisTab,
-} from "@/components/workspace/AnalysisTab";
+import { AnalysisTab } from "@/components/workspace/AnalysisTab";
 import { useAnalysisStore } from "@/hooks/stores/useAnalysisStore";
 import { createAnalysisSchema, validateForm } from "@/validations";
-import type { MarkerCoordinates } from "@/components/MarkerPicker";
 import { CompareTab } from "@/components/workspace/CompareTab";
 import {
   ConstructibilityTab,
@@ -203,15 +200,6 @@ export function WorkspaceClient({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  const handleProjectChange = (nextProjectId: string) => {
-    setProjectId(nextProjectId);
-    setActiveSnapshot(null);
-    setCompareResult(null);
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("projectId", nextProjectId);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  };
-
   // Mutations
   const parcelLookupMutation = useMutation({
     mutationFn: () => {
@@ -375,9 +363,7 @@ export function WorkspaceClient({
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
       {statusBanner && (
-        <Alert
-          variant={statusBanner.type === "ok" ? "success" : "destructive"}
-        >
+        <Alert variant={statusBanner.type === "ok" ? "success" : "destructive"}>
           {statusBanner.type === "ok" ? (
             <CheckCircle2 className="h-4 w-4" />
           ) : (
@@ -447,11 +433,8 @@ export function WorkspaceClient({
 
         <TabsContent value="analysis">
           <AnalysisTab
-            projects={projects}
             parcels={parcels}
             aiModels={aiModels}
-            hideProjectSelect={Boolean(initialProjectId)}
-            onProjectChange={handleProjectChange}
             onAddressSelect={(suggestion) => {
               setMapPreview((prev) => ({
                 ...prev,

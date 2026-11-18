@@ -24,11 +24,8 @@ import type { ProjectItem } from "@/types/projects";
 export type LocationInputMode = "address" | "parcel" | "map";
 
 export interface AnalysisTabProps {
-  projects: ProjectItem[];
   parcels: ParcelRecord[];
   aiModels: AIModelRecord[];
-  hideProjectSelect?: boolean;
-  onProjectChange: (nextProjectId: string) => void;
   onAddressSelect?: (suggestion: AddressSuggestion) => void;
   onParcelSelect?: (parcelId: string, parcel?: ParcelRecord) => void;
   onPickedLocationChange?: (coords: MarkerCoordinates) => void;
@@ -41,11 +38,8 @@ export interface AnalysisTabProps {
 const ANALYSIS_FORM_ID = "plu-analysis-form";
 
 export function AnalysisTab({
-  projects,
   parcels,
   aiModels,
-  hideProjectSelect = false,
-  onProjectChange,
   onAddressSelect,
   onParcelSelect,
   onPickedLocationChange,
@@ -64,11 +58,8 @@ export function AnalysisTab({
 
   const { analysisFormStructure } = useAnalysisFormStructure({
     analysisStore,
-    projects,
     parcels,
     aiModels,
-    hideProjectSelect,
-    onProjectChange,
     onAddressSelect,
     onParcelSelect,
     onPickedLocationChange,

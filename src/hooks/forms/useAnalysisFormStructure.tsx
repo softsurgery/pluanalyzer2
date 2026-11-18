@@ -19,7 +19,6 @@ import type { LocationInputMode } from "@/components/workspace/AnalysisTab";
 import { AnalysisStore } from "@/hooks/stores/useAnalysisStore";
 import { cn } from "@/lib/utils";
 import type { ParcelRecord } from "@/types/parcels";
-import type { ProjectItem } from "@/types/projects";
 
 const AUTO_PARCEL_VALUE = "__auto__";
 const SYSTEM_DEFAULT_MODEL_VALUE = "__default__";
@@ -48,11 +47,8 @@ const LOCATION_MODES: Array<{
 
 interface AnalysisFormStructureProps {
   analysisStore: AnalysisStore;
-  projects: ProjectItem[];
   parcels: ParcelRecord[];
   aiModels: AIModelRecord[];
-  hideProjectSelect?: boolean;
-  onProjectChange?: (nextProjectId: string) => void;
   onAddressSelect?: (suggestion: AddressSuggestion) => void;
   onParcelSelect?: (parcelId: string, parcel?: ParcelRecord) => void;
   onPickedLocationChange?: (coords: MarkerCoordinates) => void;
@@ -60,11 +56,8 @@ interface AnalysisFormStructureProps {
 
 export const useAnalysisFormStructure = ({
   analysisStore,
-  projects,
   parcels,
   aiModels,
-  hideProjectSelect = false,
-  onProjectChange,
   onAddressSelect,
   onParcelSelect,
   onPickedLocationChange,
@@ -73,30 +66,6 @@ export const useAnalysisFormStructure = ({
   const isAddressMode = locationMode === "address";
   const isParcelMode = locationMode === "parcel";
   const isMapMode = locationMode === "map";
-
-  const projectField: Field<SelectFieldProps> = {
-    id: "ws-project",
-    label: "Projet",
-    variant: FieldVariant.SELECT,
-    placeholder: "Sélectionner un projet",
-    description: "Projet auquel associer l'analyse et son snapshot.",
-    hidden: hideProjectSelect,
-    wrapperClassName: "max-w-md",
-    error: analysisStore.createDtoErrors?.projectId?.[0],
-    props: {
-      value: analysisStore.createDto.projectId,
-      onValueChange: (value) => {
-        const nextId = value || "";
-        analysisStore.setNested("createDto.projectId", nextId);
-        analysisStore.setNested("createDtoErrors.projectId", []);
-        onProjectChange?.(nextId);
-      },
-      options: projects.map((p) => ({
-        label: `${p.name} (${p.codeInsee})`,
-        value: String(p.id),
-      })),
-    },
-  };
 
   const locationModeField: Field<CustomFieldProps> = {
     id: "ws-location-mode",
@@ -266,10 +235,9 @@ export const useAnalysisFormStructure = ({
 
   const aiModelField: Field<SelectFieldProps> = {
     id: "ws-ai-model",
-    label: "Modèle IA (OpenRouter)",
+    label: "Modèle IA",
     variant: FieldVariant.SELECT,
-    description:
-      "Modèle utilisé pour l'interprétation réglementaire. Configurable par l'administrateur dans Payload.",
+    description: "Modèle utilisé pour l'interprétation réglementaire",
     wrapperClassName: "max-w-md",
     error: analysisStore.createDtoErrors?.aiModel?.[0],
     props: {
@@ -298,6 +266,7 @@ export const useAnalysisFormStructure = ({
     description:
       "Chaque envoi crée une nouvelle version immuable dans l'historique.",
     error: analysisStore.createDtoErrors?.prompt?.[0],
+    className: "h-60",
     props: {
       value: analysisStore.createDto.prompt,
       onChange: (value) => {
@@ -314,7 +283,6 @@ export const useAnalysisFormStructure = ({
       {
         gap: 20,
         rows: [
-          { fields: [projectField] },
           { fields: [locationModeField] },
           { fields: [addressField, iduField, parcelField] },
           { fields: [mapField] },
