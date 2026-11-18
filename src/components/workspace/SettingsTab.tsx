@@ -62,13 +62,13 @@ export function SettingsTab({
       >
         <Card>
           <CardHeader>
-            <Skeleton className="h-5 w-44" />
-            <Skeleton className="h-3.5 w-72" />
+            <Skeleton className="h-4 w-44" />
+            <Skeleton className="h-4 w-72 max-w-full" />
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {Array.from({ length: 4 }).map((_, idx) => (
-              <div key={idx} className="space-y-2">
-                <Skeleton className="h-3.5 w-20" />
+              <div key={idx} className="space-y-1">
+                <Skeleton className="h-4 w-20" />
                 <Skeleton className="h-5 w-32" />
               </div>
             ))}
@@ -77,8 +77,8 @@ export function SettingsTab({
 
         <Card>
           <CardHeader>
-            <Skeleton className="h-5 w-36" />
-            <Skeleton className="h-3.5 w-80 max-w-full" />
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-4 w-80 max-w-full" />
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             <Skeleton className="h-8 w-36 rounded-md" />
@@ -88,11 +88,11 @@ export function SettingsTab({
 
         <Card>
           <CardHeader>
-            <Skeleton className="h-5 w-32" />
-            <Skeleton className="h-3.5 w-96 max-w-full" />
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-96 max-w-full" />
           </CardHeader>
           <CardContent>
-            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-[68px] w-full rounded-lg" />
           </CardContent>
         </Card>
       </div>

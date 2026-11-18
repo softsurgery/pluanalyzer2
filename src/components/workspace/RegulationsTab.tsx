@@ -25,13 +25,13 @@ export function RegulationsTab({
       >
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
-            <Skeleton className="h-4 w-52" />
-            <Skeleton className="h-5 w-24 rounded-full" />
+            <Skeleton className="h-3.5 w-52" />
+            <Skeleton className="h-[22px] w-24 rounded-full" />
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-2">
               {Array.from({ length: 6 }).map((_, idx) => (
-                <Skeleton key={idx} className="h-9 w-full rounded-lg" />
+                <Skeleton key={idx} className="h-8 w-full rounded-lg" />
               ))}
             </div>
           </CardContent>
@@ -39,14 +39,16 @@ export function RegulationsTab({
 
         <Card>
           <CardHeader className="pb-3">
-            <Skeleton className="h-4 w-44" />
+            <Skeleton className="h-3.5 w-44" />
           </CardHeader>
           <CardContent className="space-y-3">
             {Array.from({ length: 3 }).map((_, idx) => (
-              <div key={idx} className="space-y-2 rounded-lg border p-3">
-                <Skeleton className="h-3.5 w-1/2" />
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-3 w-5/6" />
+              <div key={idx} className="rounded-lg border p-3">
+                <Skeleton className="h-4 w-1/2" />
+                <div className="mt-1 space-y-1">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6" />
+                </div>
               </div>
             ))}
           </CardContent>

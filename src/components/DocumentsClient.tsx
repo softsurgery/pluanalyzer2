@@ -178,12 +178,12 @@ export function DocumentsClient() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex flex-1 items-start gap-3">
                         <Skeleton className="mt-0.5 h-5 w-5 shrink-0 rounded" />
-                        <div className="flex-1 space-y-2">
-                          <Skeleton className="h-4 w-2/3" />
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <Skeleton className="h-3.5 w-16" />
-                            <Skeleton className="h-3.5 w-20" />
-                            <Skeleton className="h-4 w-16 rounded-full" />
+                        <div className="flex-1">
+                          <Skeleton className="h-5 w-2/3" />
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <Skeleton className="h-4 w-16" />
+                            <Skeleton className="h-4 w-20" />
+                            <Skeleton className="h-5 w-16 rounded-full" />
                           </div>
                         </div>
                       </div>

@@ -37,13 +37,13 @@ export function HistoryTab({
           {Array.from({ length: 3 }).map((_, idx) => (
             <Card key={idx}>
               <CardContent className="flex flex-col justify-between gap-3 p-4 sm:flex-row sm:items-center">
-                <div className="flex-1 space-y-2">
+                <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Skeleton className="h-5 w-8 rounded" />
-                    <Skeleton className="h-4 w-44" />
-                    <Skeleton className="h-3.5 w-28" />
+                    <Skeleton className="h-[22px] w-8 rounded" />
+                    <Skeleton className="h-5 w-44" />
+                    <Skeleton className="h-4 w-28" />
                   </div>
-                  <Skeleton className="h-3.5 w-3/4" />
+                  <Skeleton className="mt-1 h-4 w-3/4" />
                 </div>
                 <div className="flex items-center gap-2">
                   <Skeleton className="h-8 w-20 rounded-md" />
