@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { ThemeProvider } from '@/components/theme-provider'
-import { QueryProvider } from '@/components/query-provider'
+import { ThemeProvider } from '@/contexts/ThemeProvider'
+import { QueryProvider } from '@/contexts/QueryProvider'
 
 export const metadata: Metadata = {
   title: 'PLU Analyzer — Urban-Planning Feasibility Platform',

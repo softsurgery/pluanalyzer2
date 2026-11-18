@@ -6,7 +6,7 @@ import { Building2, FileText, FolderKanban, MapPin } from "lucide-react";
 import type { AuthUser } from "@/access/roles";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ModeToggle } from "@/components/mode-toggle";
+import { ModeToggle } from "@/components/shared/ModeToggle";
 import { UserNav } from "@/components/UserNav";
 
 export function Navbar({ user }: { user: AuthUser | null }) {

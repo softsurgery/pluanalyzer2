@@ -1,12 +1,12 @@
-import { getPayloadWithUser } from '@/lib/payload-auth'
-import { Navbar } from '@/components/Navbar'
-import { LoginPanel } from '@/components/LoginPanel'
-import { DocumentsClient } from '@/components/DocumentsClient'
+import { getPayloadWithUser } from "@/lib/payload-auth";
+import { Navbar } from "@/components/layout/Navbar";
+import { LoginPanel } from "@/components/LoginPanel";
+import { DocumentsClient } from "@/components/DocumentsClient";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export default async function DocumentsPage() {
-  const { user } = await getPayloadWithUser()
+  const { user } = await getPayloadWithUser();
 
   if (!user) {
     return (
@@ -16,7 +16,7 @@ export default async function DocumentsPage() {
           <LoginPanel />
         </main>
       </>
-    )
+    );
   }
 
   return (
@@ -24,5 +24,5 @@ export default async function DocumentsPage() {
       <Navbar user={user} />
       <DocumentsClient />
     </>
-  )
+  );
 }
