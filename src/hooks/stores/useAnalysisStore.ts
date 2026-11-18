@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { MarkerCoordinates } from "@/components/MarkerPicker";
 import type { LocationInputMode } from "@/components/workspace/AnalysisTab";
-import { setNestedValue } from "./utils";
+import { setNestedValue } from "@/lib/object";
 
 export interface CreateAnalysisDto {
   projectId: string;
@@ -43,6 +43,7 @@ const initialState: AnalysisStoreData = {
 export const useAnalysisStore = create<AnalysisStore>((set) => ({
   ...initialState,
   set: (name, value) => set((state) => ({ ...state, [name]: value })),
-  setNested: (path, value) => set((state) => setNestedValue(state, path, value)),
+  setNested: (path, value) =>
+    set((state) => setNestedValue(state, path, value)),
   reset: () => set({ ...initialState }),
 }));

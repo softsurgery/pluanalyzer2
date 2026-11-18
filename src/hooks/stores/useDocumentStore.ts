@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { setNestedValue } from "./utils";
+import { setNestedValue } from "@/lib/object";
 
 export interface CreateDocumentDto {
   title: string;
@@ -34,6 +34,7 @@ const initialState: DocumentStoreData = {
 export const useDocumentStore = create<DocumentStore>((set) => ({
   ...initialState,
   set: (name, value) => set((state) => ({ ...state, [name]: value })),
-  setNested: (path, value) => set((state) => setNestedValue(state, path, value)),
+  setNested: (path, value) =>
+    set((state) => setNestedValue(state, path, value)),
   reset: () => set({ ...initialState }),
 }));

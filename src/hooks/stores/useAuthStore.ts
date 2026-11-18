@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { setNestedValue } from "./utils";
+import { setNestedValue } from "@/lib/object";
 
 export interface LoginDto {
   email: string;
@@ -28,6 +28,7 @@ const initialState: AuthStoreData = {
 export const useAuthStore = create<AuthStore>((set) => ({
   ...initialState,
   set: (name, value) => set((state) => ({ ...state, [name]: value })),
-  setNested: (path, value) => set((state) => setNestedValue(state, path, value)),
+  setNested: (path, value) =>
+    set((state) => setNestedValue(state, path, value)),
   reset: () => set({ ...initialState }),
 }));
