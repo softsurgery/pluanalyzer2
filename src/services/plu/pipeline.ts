@@ -1,21 +1,21 @@
 import type { Payload } from 'payload'
-import { geocodeFrenchAddress } from './geocoding'
-import { fetchIgnCadastreParcel } from './cadastre'
-import { fetchIgnApicartoGpu } from './apicarto'
-import { fetchMetropoleArcgisZoning } from './metropole-arcgis'
-import { fetchGpuDocuments } from './gpu-documents'
-import { parsePluArticles } from './pdf-extractor'
-import { interpretRegulationsWithGroq } from './groq-interpreter'
-import { validateRegulatoryRules } from './regulatory-validator'
-import { calculateConstructibility } from './constructibility'
-import { buildArchicadExport } from './archicad-export'
+import { geocodeFrenchAddress } from '@/services/plu/geocoding'
+import { fetchIgnCadastreParcel } from '@/services/plu/cadastre'
+import { fetchIgnApicartoGpu } from '@/services/plu/apicarto'
+import { fetchMetropoleArcgisZoning } from '@/services/plu/metropole-arcgis'
+import { fetchGpuDocuments } from '@/services/plu/gpu-documents'
+import { parsePluArticles } from '@/services/plu/pdf-extractor'
+import { interpretRegulationsWithGroq } from '@/services/plu/groq-interpreter'
+import { validateRegulatoryRules } from '@/services/plu/regulatory-validator'
+import { calculateConstructibility } from '@/services/plu/constructibility'
+import { buildArchicadExport } from '@/services/plu/archicad-export'
 import type {
   ExtractedArticle,
   GeoJSONGeometry,
   GeoPoint,
   PipelineStepLog,
   StructuredRegulatoryRules,
-} from './types'
+} from '@/services/plu/types'
 
 export interface RunAnalysisInput {
   projectId: number | string

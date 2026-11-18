@@ -32,17 +32,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AnalysisTab,
   type LocationInputMode,
-} from "./workspace/AnalysisTab";
-import type { MarkerCoordinates } from "./MarkerPicker";
-import { CompareTab } from "./workspace/CompareTab";
+} from "@/components/workspace/AnalysisTab";
+import type { MarkerCoordinates } from "@/components/MarkerPicker";
+import { CompareTab } from "@/components/workspace/CompareTab";
 import {
   ConstructibilityTab,
   type MapPreviewState,
-} from "./workspace/ConstructibilityTab";
-import { HistoryTab } from "./workspace/HistoryTab";
-import { JsonInspectorTab } from "./workspace/JsonInspectorTab";
-import { RegulationsTab } from "./workspace/RegulationsTab";
-import { SettingsTab } from "./workspace/SettingsTab";
+} from "@/components/workspace/ConstructibilityTab";
+import { HistoryTab } from "@/components/workspace/HistoryTab";
+import { JsonInspectorTab } from "@/components/workspace/JsonInspectorTab";
+import { RegulationsTab } from "@/components/workspace/RegulationsTab";
+import { SettingsTab } from "@/components/workspace/SettingsTab";
 
 export type { ParcelRecord, SnapshotRecord };
 

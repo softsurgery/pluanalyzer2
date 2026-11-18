@@ -1,5 +1,5 @@
-import { fetchJsonWithTimeout } from './http'
-import type { GPUDocumentInfo, GPUDocumentsResult } from './types'
+import { fetchJsonWithTimeout } from '@/services/plu/http'
+import type { GPUDocumentInfo, GPUDocumentsResult } from '@/services/plu/types'
 
 interface GpuApiDocument {
   id?: string

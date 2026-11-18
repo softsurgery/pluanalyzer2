@@ -1,6 +1,6 @@
 import type { PaginatedResponse } from '@/types/common'
 import type { CreateProjectInput, DashboardStats, ProjectItem } from '@/types/projects'
-import { apiFetch } from './client'
+import { apiFetch } from '@/api/client'
 
 export const projectKeys = {
   all: ['projects'] as const,

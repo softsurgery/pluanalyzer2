@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { parsePluArticles } from '../pdf-extractor'
-import { validateRegulatoryRules } from '../regulatory-validator'
-import { calculateConstructibility } from '../constructibility'
-import { buildArchicadExport } from '../archicad-export'
-import { interpretRegulationsWithGroq } from '../groq-interpreter'
-import { compareAnalysisSnapshots } from '../pipeline'
-import type { StructuredRegulatoryRules } from '../types'
+import { parsePluArticles } from '@/services/plu/pdf-extractor'
+import { validateRegulatoryRules } from '@/services/plu/regulatory-validator'
+import { calculateConstructibility } from '@/services/plu/constructibility'
+import { buildArchicadExport } from '@/services/plu/archicad-export'
+import { interpretRegulationsWithGroq } from '@/services/plu/groq-interpreter'
+import { compareAnalysisSnapshots } from '@/services/plu/pipeline'
+import type { StructuredRegulatoryRules } from '@/services/plu/types'
 
 const SAMPLE_RULES: StructuredRegulatoryRules = {
   maxHeightM: 15,

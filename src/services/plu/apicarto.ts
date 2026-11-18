@@ -1,5 +1,5 @@
-import { fetchJsonWithTimeout } from './http'
-import type { ApicartoResult, ApicartoZoningFeature, GeoJSONGeometry, GeoPoint } from './types'
+import { fetchJsonWithTimeout } from '@/services/plu/http'
+import type { ApicartoResult, ApicartoZoningFeature, GeoJSONGeometry, GeoPoint } from '@/services/plu/types'
 
 interface ApicartoCollectionResponse<T = Record<string, unknown>> {
   features?: Array<{

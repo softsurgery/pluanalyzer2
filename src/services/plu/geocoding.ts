@@ -1,5 +1,5 @@
-import { fetchJsonWithTimeout } from './http'
-import type { GeocodingResult } from './types'
+import { fetchJsonWithTimeout } from '@/services/plu/http'
+import type { GeocodingResult } from '@/services/plu/types'
 
 interface BanFeatureCollection {
   features?: Array<{

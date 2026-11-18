@@ -4,7 +4,7 @@ import type {
   GeoJSONGeometry,
   GeoPoint,
   StructuredRegulatoryRules,
-} from './types'
+} from '@/services/plu/types'
 
 /**
  * Convert WGS84 polygon coordinates into local metric coordinates (meters) relative to centroid

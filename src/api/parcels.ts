@@ -1,6 +1,6 @@
 import type { PaginatedResponse } from '@/types/common'
 import type { ParcelLookupResponse, ParcelRecord } from '@/types/parcels'
-import { apiFetch } from './client'
+import { apiFetch } from '@/api/client'
 
 export const parcelKeys = {
   all: ['parcels'] as const,

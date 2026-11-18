@@ -1,5 +1,5 @@
-import { fetchJsonWithTimeout } from './http'
-import type { ArcGISResult, GeoPoint } from './types'
+import { fetchJsonWithTimeout } from '@/services/plu/http'
+import type { ArcGISResult, GeoPoint } from '@/services/plu/types'
 
 interface ArcGISQueryResponse {
   features?: Array<{

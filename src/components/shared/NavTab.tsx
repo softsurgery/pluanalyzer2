@@ -3,15 +3,15 @@
 import React from "react";
 import { ExternalLink, MoreHorizontal } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
-import { Button } from "../ui/button";
-import { Badge } from "../ui/badge";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
 
 export type NavTabItem = {
   href: string;

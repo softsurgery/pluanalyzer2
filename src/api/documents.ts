@@ -1,6 +1,6 @@
 import type { PaginatedResponse } from '@/types/common'
 import type { DocumentItem, UploadDocumentInput } from '@/types/documents'
-import { apiFetch } from './client'
+import { apiFetch } from '@/api/client'
 
 export const documentKeys = {
   all: ['documents'] as const,

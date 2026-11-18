@@ -1,5 +1,5 @@
 import type { LoginInput, UpdateProfileInput } from '@/types/auth'
-import { apiFetch } from './client'
+import { apiFetch } from '@/api/client'
 
 export async function loginUser(input: LoginInput): Promise<unknown> {
   return apiFetch('/api/users/login', {

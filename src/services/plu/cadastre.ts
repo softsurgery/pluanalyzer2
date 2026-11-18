@@ -1,5 +1,5 @@
-import { fetchJsonWithTimeout } from './http'
-import type { CadastreParcelResult, GeoJSONGeometry, GeoPoint } from './types'
+import { fetchJsonWithTimeout } from '@/services/plu/http'
+import type { CadastreParcelResult, GeoJSONGeometry, GeoPoint } from '@/services/plu/types'
 
 interface CadastreFeatureCollection {
   features?: Array<{

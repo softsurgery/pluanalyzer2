@@ -1,9 +1,9 @@
-import { fetchJsonWithTimeout } from './http'
+import { fetchJsonWithTimeout } from '@/services/plu/http'
 import type {
   ExtractedArticle,
   GroqInterpretationResult,
   StructuredRegulatoryRules,
-} from './types'
+} from '@/services/plu/types'
 
 const EMPTY_RULES: StructuredRegulatoryRules = {
   maxHeightM: null,

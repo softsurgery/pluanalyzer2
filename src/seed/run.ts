@@ -1,6 +1,6 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { seedDatabase } from './index'
+import { seedDatabase } from '@/seed/index'
 
 try {
   process.loadEnvFile?.('.env')

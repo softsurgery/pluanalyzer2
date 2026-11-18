@@ -2,7 +2,7 @@ import type {
   StructuredRegulatoryRules,
   ValidationIssue,
   ValidationReport,
-} from './types'
+} from '@/services/plu/types'
 
 /**
  * Validate regulatory rules for physical, legal, and completeness consistency.

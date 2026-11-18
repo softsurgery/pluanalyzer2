@@ -1,4 +1,4 @@
-import type { ConstructibilityResult, StructuredRegulatoryRules } from './types'
+import type { ConstructibilityResult, StructuredRegulatoryRules } from '@/services/plu/types'
 
 const DEFAULT_FLOOR_HEIGHT_M = 3.0
 const AVG_DWELLING_SDP_M2 = 65

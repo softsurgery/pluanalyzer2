@@ -3,7 +3,7 @@ import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import type { ExtractedArticle, PDFExtractionResult } from './types'
+import type { ExtractedArticle, PDFExtractionResult } from '@/services/plu/types'
 
 const execFileAsync = promisify(execFile)
 

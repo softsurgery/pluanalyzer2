@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Input } from './input'
+import { Input } from '@/components/ui/input'
 
 export interface InteractiveSelectProps<T> {
   id?: string

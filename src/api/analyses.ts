@@ -1,6 +1,6 @@
 import type { RunAnalysisInput, SnapshotRecord } from '@/types/analyses'
 import type { PaginatedResponse } from '@/types/common'
-import { apiFetch } from './client'
+import { apiFetch } from '@/api/client'
 
 export const analysisKeys = {
   all: ['snapshots'] as const,
