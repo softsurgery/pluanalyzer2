@@ -1,9 +1,10 @@
 import { Loader2, MapPin, Search } from "lucide-react";
+import type { AIModelRecord } from "@/api/ai-models";
+import { fetchAddressSuggestions, type AddressSuggestion } from "@/api/parcels";
 import {
-  fetchAddressSuggestions,
-  type AddressSuggestion,
-} from "@/api/parcels";
-import { MarkerPicker, type MarkerCoordinates } from "@/components/MarkerPicker";
+  MarkerPicker,
+  type MarkerCoordinates,
+} from "@/components/MarkerPicker";
 import {
   CustomFieldProps,
   Field,
@@ -22,6 +23,7 @@ import type { ParcelRecord } from "@/types/parcels";
 import type { ProjectItem } from "@/types/projects";
 
 const AUTO_PARCEL_VALUE = "__auto__";
+const SYSTEM_DEFAULT_MODEL_VALUE = "__default__";
 
 const LOCATION_MODES: Array<{
   value: LocationInputMode;
@@ -49,6 +51,7 @@ interface AnalysisFormStructureProps {
   analysisStore: AnalysisStore;
   projects: ProjectItem[];
   parcels: ParcelRecord[];
+  aiModels: AIModelRecord[];
   hideProjectSelect?: boolean;
   onProjectChange?: (nextProjectId: string) => void;
   onAddressSelect?: (suggestion: AddressSuggestion) => void;
@@ -62,6 +65,7 @@ export const useAnalysisFormStructure = ({
   analysisStore,
   projects,
   parcels,
+  aiModels,
   hideProjectSelect = false,
   onProjectChange,
   onAddressSelect,
@@ -74,8 +78,7 @@ export const useAnalysisFormStructure = ({
   const isAddressMode = locationMode === "address";
   const isParcelMode = locationMode === "parcel";
   const isMapMode = locationMode === "map";
-  const lookupDisabled =
-    isLookingUpParcel || (isMapMode && !pickedLocation);
+  const lookupDisabled = isLookingUpParcel || (isMapMode && !pickedLocation);
 
   const projectField: Field<SelectFieldProps> = {
     id: "ws-project",
@@ -127,7 +130,10 @@ export const useAnalysisFormStructure = ({
                   value={mode.value}
                   checked={checked}
                   onChange={() =>
-                    analysisStore.setNested("createDto.locationMode", mode.value)
+                    analysisStore.setNested(
+                      "createDto.locationMode",
+                      mode.value,
+                    )
                   }
                   className="mt-1 h-4 w-4 accent-primary"
                 />
@@ -284,12 +290,44 @@ export const useAnalysisFormStructure = ({
     },
   };
 
+  const defaultModel = aiModels.find((m) => m.isDefault);
+  const defaultOptionLabel = defaultModel
+    ? `Par défaut du système (${defaultModel.label || defaultModel.model})`
+    : "Par défaut du système";
+
+  const aiModelField: Field<SelectFieldProps> = {
+    id: "ws-ai-model",
+    label: "Modèle IA (OpenRouter)",
+    variant: FieldVariant.SELECT,
+    description:
+      "Modèle utilisé pour l'interprétation réglementaire. Configurable par l'administrateur dans Payload.",
+    wrapperClassName: "max-w-md",
+    error: analysisStore.createDtoErrors?.aiModel?.[0],
+    props: {
+      value: analysisStore.createDto.aiModel || SYSTEM_DEFAULT_MODEL_VALUE,
+      onValueChange: (value) => {
+        const nextModel =
+          !value || value === SYSTEM_DEFAULT_MODEL_VALUE ? "" : value;
+        analysisStore.setNested("createDto.aiModel", nextModel);
+        analysisStore.setNested("createDtoErrors.aiModel", []);
+      },
+      options: [
+        { label: defaultOptionLabel, value: SYSTEM_DEFAULT_MODEL_VALUE },
+        ...aiModels.map((m) => ({
+          label: `${m.label ? `${m.label} — ` : ""}${m.model}${m.isDefault ? " (Par défaut)" : ""}`,
+          value: m.model,
+        })),
+      ],
+    },
+  };
+
   const promptField: Field<TextareaFieldProps> = {
     id: "ws-prompt",
     label: "Prompt d'analyse de faisabilité",
     variant: FieldVariant.TEXTAREA,
     required: true,
-    description: "Chaque envoi crée une nouvelle version immuable dans l'historique.",
+    description:
+      "Chaque envoi crée une nouvelle version immuable dans l'historique.",
     error: analysisStore.createDtoErrors?.prompt?.[0],
     props: {
       value: analysisStore.createDto.prompt,
@@ -311,6 +349,7 @@ export const useAnalysisFormStructure = ({
           { fields: [locationModeField] },
           { fields: [addressField, iduField, parcelField, lookupField] },
           { fields: [mapField] },
+          { fields: [aiModelField] },
           { fields: [promptField] },
         ],
       },

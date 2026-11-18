@@ -3,9 +3,9 @@ import { geocodeFrenchAddress } from '@/services/plu/geocoding'
 import { fetchIgnCadastreParcel } from '@/services/plu/cadastre'
 import { fetchIgnApicartoGpu } from '@/services/plu/apicarto'
 import { fetchMetropoleArcgisZoning } from '@/services/plu/metropole-arcgis'
-import { fetchGpuDocuments } from '@/services/plu/gpu-documents'
+import { fetchGpuDocuments, fetchGpuRegulationPdfText } from '@/services/plu/gpu-documents'
 import { parsePluArticles } from '@/services/plu/pdf-extractor'
-import { interpretRegulationsWithGroq } from '@/services/plu/groq-interpreter'
+import { interpretRegulationsWithOpenRouter } from '@/services/plu/openrouter-interpreter'
 import { validateRegulatoryRules } from '@/services/plu/regulatory-validator'
 import { calculateConstructibility } from '@/services/plu/constructibility'
 import { buildArchicadExport } from '@/services/plu/archicad-export'
@@ -21,6 +21,7 @@ export interface RunAnalysisInput {
   projectId: number | string
   analysisId?: number | string
   prompt: string
+  aiModel?: string
   address?: string
   parcelId?: number | string
   idu?: string
@@ -310,6 +311,7 @@ export async function runPluAnalysisPipeline(
       where: {
         or: [
           { project: { equals: project.id } },
+          { codeInsee: { equals: resolvedCodeInsee } },
           ...(resolvedZoneCode
             ? [{ and: [{ codeInsee: { equals: resolvedCodeInsee } }, { zoneCode: { equals: resolvedZoneCode } }] }]
             : []),
@@ -356,17 +358,67 @@ export async function runPluAnalysisPipeline(
       `Loaded ${matchingRegs.docs.length} regulation(s) and ${matchingDocs.docs.length} document(s)`,
     )
 
-    // 8. Groq Regulatory Interpretation
-    const groqStart = Date.now()
+    // 7b. Auto-download & extract official GPU regulation PDF if no articles were found locally
+    const primaryZone = apicartoResult?.zones?.[0]
+    if (
+      extractedArticles.length === 0 &&
+      (primaryZone?.urlfic || (primaryZone?.gpu_doc_id && primaryZone?.nomfic))
+    ) {
+      const pdfStart = Date.now()
+      const gpuPdf = await fetchGpuRegulationPdfText({
+        gpuDocId: primaryZone.gpu_doc_id,
+        nomfic: primaryZone.nomfic,
+        urlfic: primaryZone.urlfic,
+        zoneCode: resolvedZoneCode,
+      })
+      if (gpuPdf.articles.length > 0) {
+        extractedArticles.push(...gpuPdf.articles)
+        logStep(
+          'gpu_pdf_extraction',
+          'ok',
+          pdfStart,
+          `Extracted ${gpuPdf.articles.length} article(s) from official GPU PDF (${primaryZone.nomfic || gpuPdf.url})`,
+        )
+      } else {
+        logStep(
+          'gpu_pdf_extraction',
+          'warning',
+          pdfStart,
+          gpuPdf.error || 'Could not extract articles from GPU PDF',
+        )
+      }
+    }
+
+    // 8. OpenRouter Regulatory Interpretation
+    const aiStart = Date.now()
     const baseRules = mergeRules(matchingRegs.docs)
-    const interpretation = await interpretRegulationsWithGroq({
+    const activeModelsResult = await payload.find({
+      collection: 'ai-models',
+      where: { isActive: { equals: true } },
+      sort: '-isDefault,createdAt',
+      limit: 20,
+    })
+    const activeModelSlugs = activeModelsResult.docs.map((m) => m.model)
+    const defaultActiveModel =
+      activeModelsResult.docs.find((m) => m.isDefault)?.model || activeModelSlugs[0]
+    const resolvedModel =
+      input.aiModel?.trim() ||
+      defaultActiveModel ||
+      process.env.OPENROUTER_MODEL ||
+      'nvidia/nemotron-3-ultra-550b-a55b:free'
+    const fallbackModels = activeModelSlugs.filter((m) => m !== resolvedModel)
+
+    const interpretation = await interpretRegulationsWithOpenRouter({
       prompt: input.prompt,
+      model: resolvedModel,
+      fallbackModels,
+      parcelSurfaceM2: parcelDoc?.surfaceM2 ?? null,
       zoneCode: resolvedZoneCode,
       commune: parcelDoc?.commune || project.commune,
       articles: extractedArticles,
       existingRules: baseRules,
     })
-    logStep('groq_interpretation', interpretation.status === 'ok' ? 'ok' : 'warning', groqStart, interpretation.summary)
+    logStep('openrouter_interpretation', interpretation.status === 'ok' ? 'ok' : 'warning', aiStart, interpretation.summary)
 
     // 9. Regulatory Validation
     const valStart = Date.now()
@@ -579,6 +631,7 @@ export async function replaySnapshotPipeline(
       analysisId,
       parcelId,
       prompt: overridePrompt?.trim() || source.originalPrompt,
+      aiModel: submitted.aiModel,
       address: submitted.address || source.addressQuery || undefined,
       idu: submitted.idu,
       codeInsee: submitted.codeInsee,

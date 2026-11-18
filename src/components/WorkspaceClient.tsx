@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type { SnapshotRecord } from "@/types/analyses";
 import type { ParcelRecord } from "@/types/parcels";
+import { aiModelKeys, fetchAiModels } from "@/api/ai-models";
 import {
   analysisKeys,
   compareSnapshots,
@@ -104,6 +105,7 @@ export function WorkspaceClient({
     idu,
     selectedParcelId,
     pickedLocation,
+    aiModel,
     prompt,
   } = analysisStore.createDto;
 
@@ -138,6 +140,11 @@ export function WorkspaceClient({
     queryFn: () => fetchParcels(50),
   });
 
+  const aiModelsQuery = useQuery({
+    queryKey: aiModelKeys.all,
+    queryFn: fetchAiModels,
+  });
+
   const snapshotsQuery = useQuery({
     queryKey: analysisKeys.snapshots(projectId || undefined),
     queryFn: () => fetchSnapshots(projectId || undefined, 50),
@@ -146,6 +153,7 @@ export function WorkspaceClient({
 
   const projects = projectsQuery.data?.docs ?? [];
   const parcels = parcelsQuery.data?.docs ?? [];
+  const aiModels = aiModelsQuery.data?.docs ?? [];
   const snapshots = snapshotsQuery.data?.docs ?? [];
 
   useEffect(() => {
@@ -266,6 +274,7 @@ export function WorkspaceClient({
       const base = {
         projectId: Number(projectId),
         prompt,
+        aiModel: aiModel || undefined,
       };
       if (locationMode === "map" && pickedLocation) {
         return runAnalysis({
@@ -440,6 +449,7 @@ export function WorkspaceClient({
           <AnalysisTab
             projects={projects}
             parcels={parcels}
+            aiModels={aiModels}
             hideProjectSelect={Boolean(initialProjectId)}
             onProjectChange={handleProjectChange}
             onAddressSelect={(suggestion) => {

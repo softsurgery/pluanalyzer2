@@ -77,6 +77,7 @@ export interface Config {
     regulations: Regulation;
     'gis-data': GisDatum;
     executions: Execution;
+    'ai-models': AiModel;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -94,6 +95,7 @@ export interface Config {
     regulations: RegulationsSelect<false> | RegulationsSelect<true>;
     'gis-data': GisDataSelect<false> | GisDataSelect<true>;
     executions: ExecutionsSelect<false> | ExecutionsSelect<true>;
+    'ai-models': AiModelsSelect<false> | AiModelsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -547,6 +549,32 @@ export interface PromptHistory {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ai-models".
+ */
+export interface AiModel {
+  id: number;
+  /**
+   * Exact OpenRouter model slug, e.g. nvidia/nemotron-3-ultra-550b-a55b:free
+   */
+  model: string;
+  /**
+   * Optional friendly name shown in the analysis selector.
+   */
+  label?: string | null;
+  /**
+   * Set as the default OpenRouter model for analyses when no model is explicitly chosen.
+   */
+  isDefault?: boolean | null;
+  /**
+   * Only active models are selectable by users during analysis.
+   */
+  isActive?: boolean | null;
+  description?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -608,6 +636,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'executions';
         value: number | Execution;
+      } | null)
+    | ({
+        relationTo: 'ai-models';
+        value: number | AiModel;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -884,6 +916,19 @@ export interface ExecutionsSelect<T extends boolean = true> {
   logs?: T;
   errors?: T;
   triggeredBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "ai-models_select".
+ */
+export interface AiModelsSelect<T extends boolean = true> {
+  model?: T;
+  label?: T;
+  isDefault?: T;
+  isActive?: T;
+  description?: T;
   updatedAt?: T;
   createdAt?: T;
 }

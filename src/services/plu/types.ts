@@ -42,6 +42,7 @@ export interface ApicartoZoningFeature {
   typezone?: string
   destdomi?: string
   partition?: string
+  gpu_doc_id?: string
   nomfic?: string
   urlfic?: string
   datappro?: string
@@ -122,12 +123,23 @@ export interface StructuredRegulatoryRules {
   parkingPerDwelling: number | null
 }
 
-export interface GroqInterpretationResult {
+export interface OpenRouterInterpretationResult {
   status: 'ok' | 'unconfigured' | 'insufficient_data' | 'error'
   model: string
   summary: string
   zoneCode?: string
   rules: StructuredRegulatoryRules
+  constructibility?: {
+    zoneCode: string | null
+    parcelSurfaceM2: number | null
+    maxFootprintM2: number | null
+    estimatedBuildableFootprintM2: number | null
+    maxHeightM: number | null
+    estimatedStoreys: number | null
+    maxFloorAreaSdpM2: number | null
+    maxVolumeM3: number | null
+    minGreenSpaceM2: number | null
+  }
   citations: Array<{ article: string; excerpt: string }>
   warnings: string[]
   rawResponse?: unknown

@@ -123,7 +123,7 @@ export const AnalysisSnapshots: CollectionConfig = {
     {
       name: 'regulatoryInterpretation',
       type: 'json',
-      label: 'Groq / Structured Regulatory Interpretation',
+      label: 'OpenRouter / Structured Regulatory Interpretation',
     },
     {
       name: 'validationStatus',

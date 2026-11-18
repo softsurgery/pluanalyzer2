@@ -3,7 +3,7 @@ import { parsePluArticles } from '@/services/plu/pdf-extractor'
 import { validateRegulatoryRules } from '@/services/plu/regulatory-validator'
 import { calculateConstructibility } from '@/services/plu/constructibility'
 import { buildArchicadExport } from '@/services/plu/archicad-export'
-import { interpretRegulationsWithGroq } from '@/services/plu/groq-interpreter'
+import { interpretRegulationsWithOpenRouter } from '@/services/plu/openrouter-interpreter'
 import { compareAnalysisSnapshots } from '@/services/plu/pipeline'
 import type { StructuredRegulatoryRules } from '@/services/plu/types'
 
@@ -107,8 +107,8 @@ La hauteur maximale est de 15 mètres.
     expect(exported.envelopeConstraints.maxHeightM).toBe(15)
   })
 
-  it('never fabricates regulatory rules when articles are missing or Groq key is unset', async () => {
-    const emptyRes = await interpretRegulationsWithGroq({
+  it('never fabricates regulatory rules when articles are missing or OpenRouter key is unset', async () => {
+    const emptyRes = await interpretRegulationsWithOpenRouter({
       prompt: 'Test',
       zoneCode: 'UA',
       articles: [],
@@ -116,15 +116,15 @@ La hauteur maximale est de 15 mètres.
     expect(emptyRes.status).toBe('insufficient_data')
     expect(emptyRes.rules.maxHeightM).toBeNull()
 
-    const prevKey = process.env.GROQ_API_KEY
-    delete process.env.GROQ_API_KEY
-    const unconfiguredRes = await interpretRegulationsWithGroq({
+    const prevKey = process.env.OPENROUTER_API_KEY
+    delete process.env.OPENROUTER_API_KEY
+    const unconfiguredRes = await interpretRegulationsWithOpenRouter({
       prompt: 'Test',
       zoneCode: 'UA',
       articles: [{ articleNumber: 'Article 10', title: 'Hauteur', content: 'Hauteur max 12m' }],
     })
     expect(unconfiguredRes.status).toBe('unconfigured')
-    if (prevKey) process.env.GROQ_API_KEY = prevKey
+    if (prevKey) process.env.OPENROUTER_API_KEY = prevKey
   })
 
   it('compares two historical snapshots accurately', () => {

@@ -6,7 +6,7 @@ import { QueryProvider } from '@/contexts/QueryProvider'
 export const metadata: Metadata = {
   title: 'PLU Analyzer — Urban-Planning Feasibility Platform',
   description:
-    'French PLU/PLUi feasibility intelligence powered by Payload CMS, PostgreSQL, IGN API Carto, Métropole Aix-Marseille-Provence, and Groq.',
+    'French PLU/PLUi feasibility intelligence powered by Payload CMS, PostgreSQL, IGN API Carto, Métropole Aix-Marseille-Provence, and OpenRouter.',
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

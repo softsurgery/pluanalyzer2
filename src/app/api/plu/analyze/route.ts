@@ -7,6 +7,7 @@ const AnalyzeRequestSchema = z.object({
   projectId: z.union([z.number(), z.string()]),
   analysisId: z.union([z.number(), z.string()]).optional(),
   prompt: z.string().min(3, 'Prompt must be at least 3 characters'),
+  aiModel: z.string().optional(),
   address: z.string().optional(),
   parcelId: z.union([z.number(), z.string()]).optional(),
   idu: z.string().optional(),

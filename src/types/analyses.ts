@@ -22,6 +22,7 @@ export interface SnapshotRecord {
 export interface RunAnalysisInput {
   projectId: number
   prompt: string
+  aiModel?: string
   address?: string
   idu?: string
   parcelId?: number

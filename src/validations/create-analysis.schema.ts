@@ -13,6 +13,7 @@ export const createAnalysisSchema = z
         lng: z.number(),
       })
       .nullable(),
+    aiModel: z.string().optional(),
     prompt: z.string().trim().min(1, "Le prompt d'analyse est requis."),
   })
   .superRefine((data, ctx) => {

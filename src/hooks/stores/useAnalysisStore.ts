@@ -10,6 +10,7 @@ export interface CreateAnalysisDto {
   idu: string;
   selectedParcelId: string;
   pickedLocation: MarkerCoordinates | null;
+  aiModel: string;
   prompt: string;
 }
 
@@ -32,6 +33,7 @@ const initialState: AnalysisStoreData = {
     idu: "",
     selectedParcelId: "",
     pickedLocation: null,
+    aiModel: "",
     prompt:
       "Analyser la constructibilité maximale (emprise, hauteur, SDP, stationnement) pour un bâtiment mixte R+3.",
   },

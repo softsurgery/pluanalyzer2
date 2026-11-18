@@ -106,7 +106,36 @@ export async function fetchIgnCadastreParcel(
     }
   }
 
-  const feature = res.data?.features?.[0]
+  let feature = res.data?.features?.[0]
+
+  // Geocoded address points often land on the street centerline; fallback to a ~15m search box
+  if (!feature && input.point) {
+    const { lng, lat } = input.point
+    const dlng = 0.00018
+    const dlat = 0.00014
+    const boxParams = new URLSearchParams({
+      geom: JSON.stringify({
+        type: 'Polygon',
+        coordinates: [
+          [
+            [lng - dlng, lat - dlat],
+            [lng + dlng, lat - dlat],
+            [lng + dlng, lat + dlat],
+            [lng - dlng, lat + dlat],
+            [lng - dlng, lat - dlat],
+          ],
+        ],
+      }),
+    })
+    const boxRes = await fetchJsonWithTimeout<CadastreFeatureCollection>(
+      `${baseUrl}/cadastre/parcelle?${boxParams.toString()}`,
+      { timeoutMs: 12000 },
+    )
+    if (boxRes.ok) {
+      feature = boxRes.data?.features?.[0]
+    }
+  }
+
   if (!feature) {
     return {
       status: 'not_found',

@@ -1,4 +1,5 @@
 import type { Payload } from 'payload'
+import { seedAiModels } from '@/seed/ai-models'
 import { calculateConstructibility } from '@/services/plu/constructibility'
 import { validateRegulatoryRules } from '@/services/plu/regulatory-validator'
 import { buildArchicadExport } from '@/services/plu/archicad-export'
@@ -53,6 +54,9 @@ export async function seedDatabase(payload: Payload) {
     const anyUser = await payload.find({ collection: 'users', limit: 1 })
     plannerUserId = anyUser.docs[0].id
   }
+
+  // 1b. Seed Free OpenRouter AI Models
+  await seedAiModels(payload)
 
   // 2. Seed Sample Parcel (Aix-en-Provence)
   const sampleIdu = '13001000AB0123'
@@ -162,6 +166,48 @@ export async function seedDatabase(payload: Payload) {
         structuredRules: rules,
       },
     }))
+
+  // 4b. Seed Sample Regulations for Zone UI (Aix-en-Provence — 12 Avenue Sextius)
+  const existingRegUI = await payload.find({
+    collection: 'regulations',
+    where: {
+      and: [{ zoneCode: { equals: 'UI' } }, { codeInsee: { equals: '13001' } }],
+    },
+    limit: 1,
+  })
+
+  if (existingRegUI.docs.length === 0) {
+    await payload.create({
+      collection: 'regulations',
+      data: {
+        title: 'Zone UI — Règlement PLUi Pays d’Aix (Référence)',
+        zoneCode: 'UI',
+        zoneLabel: 'Zone urbaine d’intensification et de renouvellement urbain',
+        commune: 'Aix-en-Provence',
+        codeInsee: '13001',
+        articleNumber: 'Articles UI 1-6',
+        sourceType: 'manual',
+        rawText: [
+          'ARTICLE UI 2 : Implantation par rapport aux voies et emprises publiques — Implantation à l’alignement ou en retrait minimal de 3 m selon la voie.',
+          'ARTICLE UI 3 : Implantation par rapport aux limites séparatives — Retrait minimal de 4 m.',
+          'ARTICLE UI 4 : Emprise au sol — L’emprise au sol maximale des constructions est fixée à 65 % de la surface du terrain.',
+          'ARTICLE UI 5 : Hauteur maximale des constructions — La hauteur maximale est fixée à 16 mètres au faîtage (13 m à l’égout, R+4).',
+          'ARTICLE UI 6 : Espaces libres et plantations — Au moins 20 % de la surface du terrain doit rester en pleine terre. Stationnement : 1 place par logement.',
+        ].join('\n'),
+        structuredRules: {
+          maxHeightM: 16,
+          maxEavesHeightM: 13,
+          maxStoreys: 5,
+          maxCoverageRatio: 0.65,
+          frontSetbackM: 3,
+          sideSetbackM: 4,
+          rearSetbackM: 4,
+          minGreenRatio: 0.2,
+          parkingPerDwelling: 1,
+        },
+      },
+    })
+  }
 
   // 5. Seed Initial Analysis + Snapshot + PromptHistory if none exist
   const existingAnalyses = await payload.find({

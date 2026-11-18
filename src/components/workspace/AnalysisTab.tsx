@@ -2,6 +2,7 @@
 
 import type React from "react";
 import { Loader2, Play } from "lucide-react";
+import type { AIModelRecord } from "@/api/ai-models";
 import type { AddressSuggestion } from "@/api/parcels";
 import type { MarkerCoordinates } from "@/components/MarkerPicker";
 import { FormBuilder } from "@/components/shared/form-builder";
@@ -23,6 +24,7 @@ export type LocationInputMode = "address" | "parcel" | "map";
 export interface AnalysisTabProps {
   projects: ProjectItem[];
   parcels: ParcelRecord[];
+  aiModels: AIModelRecord[];
   hideProjectSelect?: boolean;
   onProjectChange: (nextProjectId: string) => void;
   onAddressSelect?: (suggestion: AddressSuggestion) => void;
@@ -37,6 +39,7 @@ export interface AnalysisTabProps {
 export function AnalysisTab({
   projects,
   parcels,
+  aiModels,
   hideProjectSelect = false,
   onProjectChange,
   onAddressSelect,
@@ -55,6 +58,7 @@ export function AnalysisTab({
     analysisStore,
     projects,
     parcels,
+    aiModels,
     hideProjectSelect,
     onProjectChange,
     onAddressSelect,

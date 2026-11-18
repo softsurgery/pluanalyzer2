@@ -15,6 +15,7 @@ import { Executions } from '@/collections/Executions'
 import { Analyses } from '@/collections/Analyses'
 import { AnalysisSnapshots } from '@/collections/AnalysisSnapshots'
 import { PromptHistory } from '@/collections/PromptHistory'
+import { AIModels } from '@/collections/AIModels'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -40,6 +41,7 @@ export default buildConfig({
     Regulations,
     GISData,
     Executions,
+    AIModels,
   ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || 'plu-analyzer-fallback-secret-change-me',

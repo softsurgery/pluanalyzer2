@@ -2,6 +2,7 @@
 
 import type { SnapshotRecord } from "@/types/analyses";
 import { ParcelMap } from "@/components/ParcelMap";
+import { MdReader } from "@/components/shared/md-reader";
 import {
   Card,
   CardContent,
@@ -129,9 +130,7 @@ export function ConstructibilityTab({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm leading-relaxed text-foreground/90">
-                {String(interp.summary)}
-              </p>
+              <MdReader content={String(interp.summary)} />
             </CardContent>
           </Card>
         ) : null}
