@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Toaster } from "@/components/ui/sonner";
 
 interface FooterContextProps {
   content: React.ReactNode;
@@ -36,6 +37,10 @@ export const FooterProvider: React.FC<{ children: React.ReactNode }> = ({
           </footer>
         ) : null}
       </div>
+      <Toaster
+        offset={content ? { bottom: 80 } : undefined}
+        mobileOffset={content ? { bottom: 80 } : undefined}
+      />
     </FooterContext.Provider>
   );
 };
