@@ -282,7 +282,7 @@ export function ParcelMap({
   return (
     <div
       className={cn(
-        'relative z-0 isolate h-[460px] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 transition-all duration-300',
+        'relative z-0 isolate h-[460px] w-full overflow-hidden rounded-xl border border-border bg-card transition-all duration-300',
         className,
       )}
     >
