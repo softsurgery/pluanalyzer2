@@ -73,6 +73,7 @@ export interface Config {
     parcels: Parcel;
     'prompt-history': PromptHistory;
     'analysis-snapshots': AnalysisSnapshot;
+    media: Media;
     documents: Document;
     regulations: Regulation;
     'gis-data': GisDatum;
@@ -91,6 +92,7 @@ export interface Config {
     parcels: ParcelsSelect<false> | ParcelsSelect<true>;
     'prompt-history': PromptHistorySelect<false> | PromptHistorySelect<true>;
     'analysis-snapshots': AnalysisSnapshotsSelect<false> | AnalysisSnapshotsSelect<true>;
+    media: MediaSelect<false> | MediaSelect<true>;
     documents: DocumentsSelect<false> | DocumentsSelect<true>;
     regulations: RegulationsSelect<false> | RegulationsSelect<true>;
     'gis-data': GisDataSelect<false> | GisDataSelect<true>;
@@ -238,6 +240,7 @@ export interface Parcel {
 export interface Document {
   id: number;
   title: string;
+  media?: (number | null) | Media;
   documentType: 'reglement' | 'oap' | 'annexe' | 'zonage' | 'rapport' | 'export';
   commune?: string | null;
   codeInsee?: string | null;
@@ -257,6 +260,18 @@ export interface Document {
     | boolean
     | null;
   project?: (number | null) | Project;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media".
+ */
+export interface Media {
+  id: number;
+  alt?: string | null;
+  prefix?: string | null;
+  _objectKey?: string | null;
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -626,6 +641,10 @@ export interface PayloadLockedDocument {
         value: number | AnalysisSnapshot;
       } | null)
     | ({
+        relationTo: 'media';
+        value: number | Media;
+      } | null)
+    | ({
         relationTo: 'documents';
         value: number | Document;
       } | null)
@@ -830,10 +849,31 @@ export interface AnalysisSnapshotsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media_select".
+ */
+export interface MediaSelect<T extends boolean = true> {
+  alt?: T;
+  prefix?: T;
+  _objectKey?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
+  focalX?: T;
+  focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "documents_select".
  */
 export interface DocumentsSelect<T extends boolean = true> {
   title?: T;
+  media?: T;
   documentType?: T;
   commune?: T;
   codeInsee?: T;
@@ -847,15 +887,6 @@ export interface DocumentsSelect<T extends boolean = true> {
   project?: T;
   updatedAt?: T;
   createdAt?: T;
-  url?: T;
-  thumbnailURL?: T;
-  filename?: T;
-  mimeType?: T;
-  filesize?: T;
-  width?: T;
-  height?: T;
-  focalX?: T;
-  focalY?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

@@ -1,3 +1,4 @@
+import type { Payload } from 'payload'
 import { fetchJsonWithTimeout } from '@/services/plu/http'
 import { extractPdfTextAndArticles, parsePluArticles } from '@/services/plu/pdf-extractor'
 import type { ExtractedArticle, GPUDocumentInfo, GPUDocumentsResult } from '@/services/plu/types'
@@ -92,6 +93,9 @@ export async function fetchGpuRegulationPdfText(params: {
   urlfic?: string
   partition?: string
   zoneCode?: string
+  commune?: string
+  codeInsee?: string
+  payload?: Payload
 }): Promise<{ url?: string; articles: ExtractedArticle[]; error?: string }> {
   const baseUrl =
     process.env.GPU_API_BASE_URL || 'https://www.geoportail-urbanisme.gouv.fr/api'
@@ -136,6 +140,34 @@ export async function fetchGpuRegulationPdfText(params: {
 
   let pdfBuffer: Buffer | null = null
   let lastError = 'Failed to fetch GPU regulation PDF'
+
+  // Check Payload `documents` collection (backed by S3/RustFS) before downloading from GPU
+  if (!cachedExtraction && params.payload && params.gpuDocId) {
+    try {
+      const existingDocs = await params.payload.find({
+        collection: 'documents',
+        where: { gpuDocumentId: { equals: params.gpuDocId } },
+        limit: 1,
+        depth: 0,
+      })
+      const existing = existingDocs.docs[0]
+      if (existing?.extractedText) {
+        console.log(
+          `[GPU PDF] Reusing Payload document #${existing.id} (gpuDocumentId=${params.gpuDocId})`,
+        )
+        cachedExtraction = {
+          url: existing.sourceUrl || pdfUrl,
+          text: existing.extractedText,
+          articles: parsePluArticles(existing.extractedText),
+        }
+        pdfUrl = cachedExtraction.url
+      }
+    } catch (err) {
+      console.warn(
+        `[GPU PDF] Payload documents lookup failed: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+  }
 
   if (!cachedExtraction) {
     for (const candidateUrl of candidateUrls) {
@@ -201,6 +233,51 @@ export async function fetchGpuRegulationPdfText(params: {
         text: extractionText,
         articles: extractionArticles,
       })
+
+      // Persist downloaded PDF into `media` (stored in RustFS S3) and link from `documents`
+      if (params.payload && pdfBuffer) {
+        try {
+          const fileName = params.nomfic || `${params.gpuDocId || 'reglement'}.pdf`
+          const title = params.commune
+            ? `Règlement PLU/PLUi — ${params.commune} (${fileName})`
+            : `Règlement PLU/PLUi — ${fileName}`
+          const mediaDoc = await params.payload.create({
+            collection: 'media',
+            file: {
+              data: pdfBuffer,
+              mimetype: 'application/pdf',
+              name: fileName,
+              size: pdfBuffer.byteLength,
+            },
+            data: {
+              alt: title,
+            },
+          })
+          const createdDoc = await params.payload.create({
+            collection: 'documents',
+            data: {
+              title,
+              media: mediaDoc.id,
+              documentType: 'reglement',
+              commune: params.commune,
+              codeInsee: params.codeInsee,
+              gpuDocumentId: params.gpuDocId,
+              sourceUrl: pdfUrl,
+              pageCount: extraction.pageCount,
+              extractionStatus:
+                extraction.status === 'ocr_completed' ? 'ocr_completed' : 'extracted',
+              extractedText: extractionText,
+            },
+          })
+          console.log(
+            `[GPU PDF] Stored media #${mediaDoc.id} & document #${createdDoc.id} in Payload/RustFS (${fileName})`,
+          )
+        } catch (err) {
+          console.warn(
+            `[GPU PDF] Failed to persist document in Payload/RustFS: ${err instanceof Error ? err.message : String(err)}`,
+          )
+        }
+      }
     }
 
     if (params.zoneCode) {

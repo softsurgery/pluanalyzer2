@@ -3,10 +3,6 @@ import { isAdmin, isAuthenticated, isPlannerOrAdmin } from '@/access/roles'
 
 export const Documents: CollectionConfig = {
   slug: 'documents',
-  upload: {
-    staticDir: 'uploads/documents',
-    mimeTypes: ['application/pdf', 'text/plain', 'application/json'],
-  },
   admin: {
     useAsTitle: 'title',
     group: 'Regulatory Knowledge',
@@ -23,6 +19,12 @@ export const Documents: CollectionConfig = {
       name: 'title',
       type: 'text',
       required: true,
+    },
+    {
+      name: 'media',
+      type: 'upload',
+      relationTo: 'media',
+      label: 'File (Media)',
     },
     {
       name: 'documentType',

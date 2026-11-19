@@ -480,6 +480,9 @@ export async function runPluAnalysisPipeline(
         urlfic: primaryZone.urlfic,
         partition: primaryZone.partition,
         zoneCode: resolvedZoneCode,
+        commune: parcelDoc?.commune || project.commune,
+        codeInsee: parcelDoc?.codeInsee || project.codeInsee,
+        payload,
       });
       if (gpuPdf.articles.length > 0) {
         extractedArticles.push(...gpuPdf.articles);

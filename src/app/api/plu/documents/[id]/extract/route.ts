@@ -21,14 +21,25 @@ export async function POST(
     const doc = await payload.findByID({
       collection: 'documents',
       id,
+      depth: 1,
     })
 
-    if (!doc.filename) {
-      return NextResponse.json({ error: 'Document has no uploaded file' }, { status: 400 })
+    const media = doc.media && typeof doc.media === 'object' ? doc.media : null
+    if (!media?.filename) {
+      return NextResponse.json({ error: 'Document has no linked media file' }, { status: 400 })
     }
 
-    const filePath = path.resolve(process.cwd(), 'uploads/documents', doc.filename)
-    const buffer = await fs.readFile(filePath)
+    let buffer: Buffer
+    if (media.url && /^https?:\/\//i.test(media.url)) {
+      const res = await fetch(media.url)
+      if (!res.ok) {
+        return NextResponse.json({ error: `Failed to fetch media file: HTTP ${res.status}` }, { status: 502 })
+      }
+      buffer = Buffer.from(await res.arrayBuffer())
+    } else {
+      const filePath = path.resolve(process.cwd(), 'uploads/media', media.filename)
+      buffer = await fs.readFile(filePath)
+    }
     const extraction = await extractPdfTextAndArticles(buffer)
 
     const updated = await payload.update({
