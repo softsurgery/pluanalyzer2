@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowRight,
@@ -11,15 +10,12 @@ import {
   FolderPlus,
   History,
   Layers,
-  Loader2,
 } from "lucide-react";
 import {
-  createProject,
   fetchDashboardStats,
   fetchProjects,
   projectKeys,
 } from "@/api/projects";
-import { FormBuilder } from "@/components/shared/form-builder";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,18 +28,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCreateProjectFormStructure } from "@/hooks/forms/useCreateProjectFormStructure";
-import { useProjectStore } from "@/hooks/stores/useProjectStore";
-import { createProjectSchema, validateForm } from "@/validations";
 
 export function DashboardClient() {
-  const queryClient = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const projectStore = useProjectStore();
-  const { createProjectFormStructure } = useCreateProjectFormStructure({
-    projectStore,
-  });
-
   const projectsQuery = useQuery({
     queryKey: projectKeys.list(24),
     queryFn: () => fetchProjects(24),
@@ -53,29 +39,6 @@ export function DashboardClient() {
     queryKey: projectKeys.stats,
     queryFn: fetchDashboardStats,
   });
-
-  const createProjectMutation = useMutation({
-    mutationFn: () => createProject(projectStore.createDto),
-    onSuccess: async () => {
-      projectStore.reset();
-      setShowForm(false);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: projectKeys.all }),
-        queryClient.invalidateQueries({ queryKey: projectKeys.stats }),
-      ]);
-    },
-  });
-
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    const result = validateForm(createProjectSchema, projectStore.createDto);
-    if (!result.success) {
-      projectStore.set("createDtoErrors", result.errors);
-      return;
-    }
-    projectStore.set("createDtoErrors", {});
-    createProjectMutation.mutate();
-  };
 
   const projects = projectsQuery.data?.docs ?? [];
   const stats = statsQuery.data ?? {
@@ -118,13 +81,15 @@ export function DashboardClient() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Tableau de bord — Études de Faisabilité PLU
+            Tableau de bord
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={() => setShowForm((v) => !v)}>
-            <FolderPlus className="h-4 w-4" />
-            Nouveau projet
+          <Button asChild>
+            <Link href="/projects/new">
+              <FolderPlus className="h-4 w-4" />
+              Nouveau projet
+            </Link>
           </Button>
         </div>
       </div>
@@ -165,54 +130,6 @@ export function DashboardClient() {
               );
             })}
       </div>
-
-      {/* Create Project Drawer */}
-      {showForm && (
-        <Card className="rounded-2xl border-primary/30">
-          <CardHeader>
-            <CardTitle className="text-base">
-              Créer un projet de faisabilité
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <FormBuilder structure={createProjectFormStructure} />
-
-              {createProjectMutation.isError && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    {createProjectMutation.error instanceof Error
-                      ? createProjectMutation.error.message
-                      : "Impossible de créer le projet"}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowForm(false)}
-                >
-                  Annuler
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={createProjectMutation.isPending}
-                >
-                  {createProjectMutation.isPending && (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  )}
-                  Enregistrer le projet
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Projects List */}
       <div className="space-y-4">

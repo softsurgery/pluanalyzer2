@@ -44,7 +44,10 @@ export function Navbar({ className, user }: NavbarProps) {
             <nav className="hidden items-center gap-1 md:flex">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const active = pathname === item.href;
+                const active =
+                  item.href === "/"
+                    ? pathname === "/" || pathname.startsWith("/projects")
+                    : pathname === item.href;
                 return (
                   <Button
                     key={item.href}
