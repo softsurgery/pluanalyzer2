@@ -47,7 +47,7 @@ export function Navbar({ className, user }: NavbarProps) {
                 const active =
                   item.href === "/"
                     ? pathname === "/" || pathname.startsWith("/projects")
-                    : pathname === item.href;
+                    : pathname.startsWith(item.href);
                 return (
                   <Button
                     key={item.href}
