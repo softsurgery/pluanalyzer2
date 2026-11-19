@@ -1,4 +1,3 @@
-import { MapPin } from "lucide-react";
 import { fetchAddressSuggestions, type AddressSuggestion } from "@/api/parcels";
 import {
   CustomFieldProps,
@@ -7,7 +6,7 @@ import {
   FormStructure,
   TextFieldProps,
 } from "@/components/shared/form-builder";
-import { InteractiveSelect } from "@/components/ui/interactive-select";
+import { InteractiveSelect } from "@/components/shared/InteractiveSelect";
 import { AnalysisStore } from "@/hooks/stores/useAnalysisStore";
 
 interface AnalysisFormStructureProps {
@@ -25,6 +24,7 @@ export const useAnalysisFormStructure = ({
     id: "ws-address",
     label: "Adresse (BAN / Géoplateforme)",
     variant: FieldVariant.CUSTOM,
+    required: true,
     description: "Autocomplétion via la Base Adresse Nationale.",
     error: analysisStore.createDtoErrors?.address?.[0],
     props: {
