@@ -6,6 +6,7 @@ export const createAnalysisSchema = z
     locationMode: z.enum(["address", "parcel", "map"]),
     address: z.string(),
     idu: z.string(),
+    cadastreNumbers: z.string().optional(),
     selectedParcelId: z.string(),
     pickedLocation: z
       .object({

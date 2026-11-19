@@ -11,14 +11,17 @@ export interface ParcelRecord {
   geometry?: unknown
 }
 
+export interface ParcelLookupItem {
+  status: string
+  idu?: string
+  surfaceM2?: number
+  centroid?: { lng?: number | null; lat?: number | null }
+  geometry?: unknown
+}
+
 export interface ParcelLookupResponse {
-  parcel?: {
-    status: string
-    idu?: string
-    surfaceM2?: number
-    centroid?: { lng?: number | null; lat?: number | null }
-    geometry?: unknown
-  }
+  parcel?: ParcelLookupItem
+  parcels?: ParcelLookupItem[]
   geocoding?: {
     coordinates?: { lng?: number | null; lat?: number | null }
     label?: string

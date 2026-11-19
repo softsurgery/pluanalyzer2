@@ -8,6 +8,7 @@ export interface CreateAnalysisDto {
   locationMode: LocationInputMode;
   address: string;
   idu: string;
+  cadastreNumbers: string;
   selectedParcelId: string;
   pickedLocation: MarkerCoordinates | null;
   aiModel: string;
@@ -31,6 +32,7 @@ const initialState: AnalysisStoreData = {
     locationMode: "address",
     address: "12 Avenue Sextius, Aix-en-Provence",
     idu: "",
+    cadastreNumbers: "",
     selectedParcelId: "",
     pickedLocation: null,
     aiModel: "",

@@ -20,6 +20,8 @@ export interface ParcelLookupInput {
   point?: GeoPoint
   idu?: string
   codeInsee?: string
+  codeDep?: string
+  comAbs?: string
   section?: string
   numero?: string
 }
@@ -64,6 +66,8 @@ export async function fetchIgnCadastreParcel(
   const baseUrl = process.env.IGN_APICARTO_BASE_URL || 'https://apicarto.ign.fr/api'
   const params = new URLSearchParams()
 
+  let cleanIdu: string | undefined
+
   if (input.point) {
     params.set(
       'geom',
@@ -73,18 +77,28 @@ export async function fetchIgnCadastreParcel(
       }),
     )
   } else if (input.idu) {
-    const clean = input.idu.trim().toUpperCase()
-    // Standard French IDU: 5 chars INSEE + 3 chars prefixe + 2 chars section + 4 chars numero = 14 chars
+    const clean = input.idu.replace(/\s+/g, '').toUpperCase()
+    // Standard French IDU: 5 chars INSEE + 3 chars com_abs/prefixe + 2 chars section + 4 chars numero = 14 chars
     if (clean.length >= 14) {
+      cleanIdu = clean
       params.set('code_insee', clean.slice(0, 5))
-      params.set('code_arr', clean.slice(5, 8))
+      params.set('com_abs', clean.slice(5, 8))
       params.set('section', clean.slice(8, 10))
       params.set('numero', clean.slice(10, 14))
     } else {
       return { status: 'error', error: `Invalid IDU format: ${input.idu}` }
     }
-  } else if (input.codeInsee && input.section && input.numero) {
-    params.set('code_insee', input.codeInsee.trim())
+  } else if (
+    (input.codeInsee || (input.codeDep && input.comAbs)) &&
+    input.section &&
+    input.numero
+  ) {
+    if (input.codeDep && input.comAbs) {
+      params.set('code_dep', input.codeDep.trim())
+      params.set('com_abs', input.comAbs.trim().padStart(3, '0'))
+    } else if (input.codeInsee) {
+      params.set('code_insee', input.codeInsee.trim())
+    }
     params.set('section', input.section.trim().toUpperCase().padStart(2, '0'))
     params.set('numero', input.numero.trim().padStart(4, '0'))
   } else {
@@ -107,6 +121,24 @@ export async function fetchIgnCadastreParcel(
   }
 
   let feature = res.data?.features?.[0]
+
+  // For Paris/Lyon/Marseille IDUs (e.g. 132088440K0039), code_insee is stored as 13055 while 844 is com_abs;
+  // fallback to code_dep + com_abs when code_insee + com_abs returns no feature.
+  if (!feature && cleanIdu && cleanIdu.slice(5, 8) !== '000') {
+    const fallbackParams = new URLSearchParams({
+      code_dep: cleanIdu.slice(0, 2),
+      com_abs: cleanIdu.slice(5, 8),
+      section: cleanIdu.slice(8, 10),
+      numero: cleanIdu.slice(10, 14),
+    })
+    const fallbackRes = await fetchJsonWithTimeout<CadastreFeatureCollection>(
+      `${baseUrl}/cadastre/parcelle?${fallbackParams.toString()}`,
+      { timeoutMs: 12000 },
+    )
+    if (fallbackRes.ok) {
+      feature = fallbackRes.data?.features?.[0]
+    }
+  }
 
   // Geocoded address points often land on the street centerline; fallback to a ~15m search box
   if (!feature && input.point) {

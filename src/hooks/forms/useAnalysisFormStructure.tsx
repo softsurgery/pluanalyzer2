@@ -8,9 +8,7 @@ import {
   TextFieldProps,
 } from "@/components/shared/form-builder";
 import { InteractiveSelect } from "@/components/ui/interactive-select";
-import type { LocationInputMode } from "@/components/workspace/RegulationsTab";
 import { AnalysisStore } from "@/hooks/stores/useAnalysisStore";
-import { cn } from "@/lib/utils";
 
 interface AnalysisFormStructureProps {
   analysisStore: AnalysisStore;
@@ -23,79 +21,11 @@ export const useAnalysisFormStructure = ({
   onAddressSelect,
   onLocationInputChange,
 }: AnalysisFormStructureProps) => {
-  const { locationMode } = analysisStore.createDto;
-  const isAddressMode = locationMode === "address";
-  const isParcelMode = locationMode === "parcel";
-
-  const handleModeChange = (mode: LocationInputMode) => {
-    analysisStore.setNested("createDto.locationMode", mode);
-    onLocationInputChange?.();
-  };
-
-  const renderModeCard = (
-    mode: LocationInputMode,
-    label: string,
-    description: string,
-  ) => {
-    const checked = locationMode === mode;
-    return (
-      <label
-        className={cn(
-          "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors",
-          checked
-            ? "border-primary bg-primary/5"
-            : "border-input hover:bg-muted/50",
-        )}
-      >
-        <input
-          type="radio"
-          name="location-mode"
-          value={mode}
-          checked={checked}
-          onChange={() => handleModeChange(mode)}
-          className="mt-1 h-4 w-4 accent-primary"
-        />
-        <div className="space-y-0.5">
-          <div className="text-sm font-semibold leading-tight">{label}</div>
-          <div className="text-xs text-muted-foreground">{description}</div>
-        </div>
-      </label>
-    );
-  };
-
-  const addressModeField: Field<CustomFieldProps> = {
-    id: "ws-location-mode-address",
-    label: "Mode de localisation de la parcelle",
-    variant: FieldVariant.CUSTOM,
-    props: {
-      children: renderModeCard(
-        "address",
-        "Adresse française",
-        "Recherche via BAN / Géoplateforme",
-      ),
-    },
-  };
-
-  const parcelModeField: Field<CustomFieldProps> = {
-    id: "ws-location-mode-parcel",
-    label: "",
-    variant: FieldVariant.CUSTOM,
-    description: "Sélectionnez la méthode d'identification de la parcelle.",
-    props: {
-      children: renderModeCard(
-        "parcel",
-        "IDU Cadastral",
-        "Saisie de l'identifiant cadastral IGN",
-      ),
-    },
-  };
-
   const addressField: Field<CustomFieldProps> = {
     id: "ws-address",
-    label: "Adresse française (BAN / Géoplateforme)",
+    label: "Adresse (BAN / Géoplateforme)",
     variant: FieldVariant.CUSTOM,
     description: "Autocomplétion via la Base Adresse Nationale.",
-    wrapperClassName: cn(!isAddressMode && "opacity-60"),
     error: analysisStore.createDtoErrors?.address?.[0],
     props: {
       children: (
@@ -115,7 +45,6 @@ export const useAnalysisFormStructure = ({
           getItemLabel={(item) => item.label}
           renderItem={(item) => (
             <div className="flex items-start gap-2">
-              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
               <div className="min-w-0">
                 <div className="truncate font-medium">{item.label}</div>
                 {item.context && (
@@ -128,27 +57,25 @@ export const useAnalysisFormStructure = ({
           )}
           placeholder="Ex: 12 Avenue Sextius, Aix-en-Provence"
           emptyText="Aucune adresse trouvée"
-          disabled={!isAddressMode}
         />
       ),
     },
   };
 
-  const iduField: Field<TextFieldProps> = {
-    id: "ws-idu",
-    label: "IDU Cadastral",
+  const cadastreNumbersField: Field<TextFieldProps> = {
+    id: "ws-cadastre-numbers",
+    label: "Numéros cadastraux",
     variant: FieldVariant.TEXT,
-    placeholder: "IDU (ex: 13001000AB0123)",
-    description: "Identifiant unique de parcelle cadastrale IGN.",
+    placeholder: "ex: 49, 50, 51, 256 (ou 844 K 39, 49, 50, 51)",
+    description:
+      "Optionnel : séparez les numéros de parcelles par des virgules (ex: 49, 50, 51, 256).",
     className: "font-mono",
-    wrapperClassName: cn(!isParcelMode && "opacity-60"),
-    error: analysisStore.createDtoErrors?.idu?.[0],
+    error: analysisStore.createDtoErrors?.cadastreNumbers?.[0],
     props: {
-      disabled: !isParcelMode,
-      value: analysisStore.createDto.idu,
+      value: analysisStore.createDto.cadastreNumbers,
       onChange: (value) => {
-        analysisStore.setNested("createDto.idu", value);
-        analysisStore.setNested("createDtoErrors.idu", []);
+        analysisStore.setNested("createDto.cadastreNumbers", value);
+        analysisStore.setNested("createDtoErrors.cadastreNumbers", []);
         onLocationInputChange?.();
       },
     },
@@ -157,15 +84,11 @@ export const useAnalysisFormStructure = ({
   const locationFormStructure: FormStructure = {
     title: "",
     description: "",
-    orientation: "vertical",
+    orientation: "horizontal",
     fieldsets: [
       {
         gap: 20,
-        rows: [{ fields: [addressModeField] }, { fields: [parcelModeField] }],
-      },
-      {
-        gap: 20,
-        rows: [{ fields: [addressField] }, { fields: [iduField] }],
+        rows: [{ fields: [addressField] }, { fields: [cadastreNumbersField] }],
       },
     ],
   };

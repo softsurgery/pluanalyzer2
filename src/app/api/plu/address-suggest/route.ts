@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getPayloadWithUser } from '@/lib/payload-auth'
+import { parseAddressCadastre } from '@/services/plu/geocoding'
 import { fetchJsonWithTimeout } from '@/services/plu/http'
 
 interface BanFeatureCollection {
@@ -24,7 +25,8 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url)
-    const q = (searchParams.get('q') || '').trim()
+    const rawQuery = (searchParams.get('q') || '').trim()
+    const { streetAddress: q, cadastreSuffix } = parseAddressCadastre(rawQuery)
     if (q.length < 3) {
       return NextResponse.json({ suggestions: [] })
     }
@@ -46,8 +48,11 @@ export async function GET(request: Request) {
       .map((f) => {
         const [lng, lat] = f.geometry!.coordinates!
         const props = f.properties!
+        const label = cadastreSuffix
+          ? `${props.label!}, ${cadastreSuffix}`
+          : props.label!
         return {
-          label: props.label!,
+          label,
           city: props.city || '',
           postcode: props.postcode || '',
           citycode: props.citycode || '',

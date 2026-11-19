@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertCircle,
-  CheckCircle2,
   Code2,
   FileText,
   GitCompare,
@@ -14,6 +12,7 @@ import {
   Search,
   Settings,
 } from "lucide-react";
+import { toast } from "sonner";
 import type { SnapshotRecord } from "@/types/analyses";
 import type { ParcelRecord } from "@/types/parcels";
 import {
@@ -29,14 +28,16 @@ import {
 } from "@/api/analyses";
 import { lookupParcel } from "@/api/parcels";
 import { deleteProject, fetchProjects, projectKeys } from "@/api/projects";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CadastralInfoTab } from "@/components/workspace/CadastralInfoTab";
 import { CompareTab } from "@/components/workspace/CompareTab";
 import { FeasibilityTab } from "@/components/workspace/FeasibilityTab";
 import { HistoryTab } from "@/components/workspace/HistoryTab";
 import { JsonInspectorTab } from "@/components/workspace/JsonInspectorTab";
-import { RegulationsTab } from "@/components/workspace/RegulationsTab";
+import {
+  type MapPreviewState,
+  RegulationsTab,
+} from "@/components/workspace/RegulationsTab";
 import { SettingsTab } from "@/components/workspace/SettingsTab";
 import { useAnalysisStore } from "@/hooks/stores/useAnalysisStore";
 import { createAnalysisSchema, validateForm } from "@/validations";
@@ -130,17 +131,65 @@ export function WorkspaceClient({
 
   // Form state (Zustand)
   const analysisStore = useAnalysisStore();
-  const { locationMode, address, idu, prompt } = analysisStore.createDto;
+  const { locationMode, address, idu, cadastreNumbers, prompt } =
+    analysisStore.createDto;
 
   useEffect(() => {
     analysisStore.setNested("createDto.projectId", projectId);
+    if (!projectId || typeof window === "undefined") return;
+
+    let restoredAddress = address;
+    let restoredCadastre = cadastreNumbers;
+    let hasRestoredPreview = false;
+
+    try {
+      const raw = window.localStorage.getItem(
+        `plu-workspace-location:${projectId}`,
+      );
+      if (raw) {
+        const saved = JSON.parse(raw) as {
+          address?: string;
+          cadastreNumbers?: string;
+          mapPreview?: MapPreviewState;
+        };
+        if (typeof saved.address === "string") {
+          restoredAddress = saved.address;
+          analysisStore.setNested("createDto.address", saved.address);
+        }
+        if (typeof saved.cadastreNumbers === "string") {
+          restoredCadastre = saved.cadastreNumbers;
+          analysisStore.setNested(
+            "createDto.cadastreNumbers",
+            saved.cadastreNumbers,
+          );
+        }
+        if (saved.mapPreview) {
+          hasRestoredPreview = true;
+          setMapPreview(saved.mapPreview);
+          setIsLocationDetected(true);
+        }
+      }
+    } catch {
+      // Ignore malformed stored location
+    }
+
+    if (
+      activeTab === "analysis" &&
+      !hasRestoredPreview &&
+      restoredAddress.trim() &&
+      autoLocalizedProjectRef.current !== projectId
+    ) {
+      autoLocalizedProjectRef.current = projectId;
+      parcelLookupMutation.mutate({
+        address: restoredAddress.trim(),
+        cadastre: restoredCadastre.trim() || undefined,
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
-  const [statusBanner, setStatusBanner] = useState<{
-    type: "ok" | "err";
-    text: string;
-  } | null>(null);
+  }, [projectId, activeTab]);
   const [isLocationDetected, setIsLocationDetected] = useState<boolean>(false);
+  const [mapPreview, setMapPreview] = useState<MapPreviewState>({});
+  const autoLocalizedProjectRef = useRef<string>("");
 
   // Comparison state
   const [compareA, setCompareA] = useState<string>("");
@@ -202,45 +251,84 @@ export function WorkspaceClient({
 
   // Mutations
   const parcelLookupMutation = useMutation({
-    mutationFn: () => {
-      if (locationMode === "parcel") {
-        return lookupParcel({ idu });
+    mutationFn: (override?: { address?: string; cadastre?: string }) => {
+      const targetAddress = override?.address ?? address;
+      const targetCadastre =
+        override?.cadastre !== undefined
+          ? override.cadastre
+          : cadastreNumbers.trim() || undefined;
+      if (locationMode === "parcel" && !override?.address) {
+        return lookupParcel({ idu, cadastre: targetCadastre });
       }
-      return lookupParcel({ address });
+      return lookupParcel({ address: targetAddress, cadastre: targetCadastre });
     },
     onSuccess: (data) => {
       if (data.parcel?.status === "ok") {
+        const nextPreview: MapPreviewState = {
+          centroid: data.parcel.centroid,
+          geometry: data.parcel.geometry,
+          label: `${data.parcel.idu} (${data.parcel.surfaceM2 ?? "?"} m²)`,
+          zoneCode: data.gpu?.zoneCode,
+        };
         setIsLocationDetected(true);
-        if (data.parcel.idu) {
+        setMapPreview(nextPreview);
+        if (data.parcel.idu && locationMode === "parcel") {
           analysisStore.setNested("createDto.idu", data.parcel.idu);
         }
-        setStatusBanner({
-          type: "ok",
-          text: `Parcelle localisée : ${data.parcel.idu} · Surface ${data.parcel.surfaceM2 ?? "?"} m² · Zone GPU : ${data.gpu?.zoneCode || "non détectée"}`,
-        });
+        if (projectId && typeof window !== "undefined") {
+          try {
+            window.localStorage.setItem(
+              `plu-workspace-location:${projectId}`,
+              JSON.stringify({
+                address: address.trim(),
+                cadastreNumbers: cadastreNumbers.trim(),
+                mapPreview: nextPreview,
+              }),
+            );
+          } catch {
+            // Ignore storage quota errors
+          }
+        }
+        toast.success("Parcelle localisée avec succès");
       } else if (data.geocoding?.coordinates) {
+        const nextPreview: MapPreviewState = {
+          centroid: data.geocoding.coordinates,
+          label: data.geocoding.label,
+          zoneCode: data.gpu?.zoneCode,
+        };
         setIsLocationDetected(true);
-        setStatusBanner({
-          type: "ok",
-          text: `Adresse géocodée (${data.geocoding.label}), parcelle cadastrale non retournée par IGN.`,
-        });
+        setMapPreview(nextPreview);
+        if (projectId && typeof window !== "undefined") {
+          try {
+            window.localStorage.setItem(
+              `plu-workspace-location:${projectId}`,
+              JSON.stringify({
+                address: address.trim(),
+                cadastreNumbers: cadastreNumbers.trim(),
+                mapPreview: nextPreview,
+              }),
+            );
+          } catch {
+            // Ignore storage quota errors
+          }
+        }
+        toast.success(
+          `Adresse géocodée (${data.geocoding.label}), parcelle cadastrale non retournée par IGN.`,
+        );
       } else {
         setIsLocationDetected(false);
-        setStatusBanner({
-          type: "err",
-          text: "Aucune parcelle trouvée pour cette recherche.",
-        });
+        setMapPreview({});
+        toast.error("Aucune parcelle trouvée pour cette recherche.");
       }
     },
     onError: (err) => {
       setIsLocationDetected(false);
-      setStatusBanner({
-        type: "err",
-        text:
-          err instanceof Error
-            ? err.message
-            : "Erreur lors de la localisation IGN",
-      });
+      setMapPreview({});
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Erreur lors de la localisation IGN",
+      );
     },
   });
 
@@ -264,20 +352,18 @@ export function WorkspaceClient({
     onSuccess: async (data) => {
       const newSnap = data.snapshot;
       setActiveSnapshot(newSnap);
-      setStatusBanner({
-        type: "ok",
-        text: `Analyse enregistrée : ${newSnap.snapshotLabel} (historique immuable mis à jour).`,
-      });
+      toast.success(
+        `Analyse enregistrée : ${newSnap.snapshotLabel} (historique immuable mis à jour).`,
+      );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: analysisKeys.all }),
         queryClient.invalidateQueries({ queryKey: projectKeys.stats }),
       ]);
     },
     onError: (err) => {
-      setStatusBanner({
-        type: "err",
-        text: err instanceof Error ? err.message : "Échec de l'analyse PLU",
-      });
+      toast.error(
+        err instanceof Error ? err.message : "Échec de l'analyse PLU",
+      );
     },
   });
 
@@ -286,20 +372,16 @@ export function WorkspaceClient({
     onSuccess: async (data) => {
       const newSnap = data.snapshot;
       setActiveSnapshot(newSnap);
-      setStatusBanner({
-        type: "ok",
-        text: `Replay terminé : nouveau snapshot ${newSnap.snapshotLabel} créé sans écraser l'historique.`,
-      });
+      toast.success(
+        `Replay terminé : nouveau snapshot ${newSnap.snapshotLabel} créé sans écraser l'historique.`,
+      );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: analysisKeys.all }),
         queryClient.invalidateQueries({ queryKey: projectKeys.stats }),
       ]);
     },
     onError: (err) => {
-      setStatusBanner({
-        type: "err",
-        text: err instanceof Error ? err.message : "Échec du replay",
-      });
+      toast.error(err instanceof Error ? err.message : "Échec du replay");
     },
   });
 
@@ -325,7 +407,6 @@ export function WorkspaceClient({
 
   const handleRunAnalysis = (e: React.FormEvent) => {
     e.preventDefault();
-    setStatusBanner(null);
     const result = validateForm(createAnalysisSchema, analysisStore.createDto);
     if (!result.success) {
       analysisStore.set("createDtoErrors", result.errors);
@@ -334,10 +415,7 @@ export function WorkspaceClient({
         result.errors.idu?.[0] ||
         result.errors.selectedParcelId?.[0];
       if (locationError) {
-        setStatusBanner({
-          type: "err",
-          text: `${locationError} (onglet Réglementation)`,
-        });
+        toast.error(`${locationError} (onglet Informations Cadastral)`);
       }
       return;
     }
@@ -347,17 +425,6 @@ export function WorkspaceClient({
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-      {statusBanner && (
-        <Alert variant={statusBanner.type === "ok" ? "success" : "destructive"}>
-          {statusBanner.type === "ok" ? (
-            <CheckCircle2 className="h-4 w-4" />
-          ) : (
-            <AlertCircle className="h-4 w-4" />
-          )}
-          <AlertDescription>{statusBanner.text}</AlertDescription>
-        </Alert>
-      )}
-
       <Tabs
         value={activeTab}
         onValueChange={(v) => handleTabChange(v as TabKey)}
@@ -366,13 +433,13 @@ export function WorkspaceClient({
           {tabSettings.showRegulations && (
             <TabsTrigger value="analysis">
               <Search className="h-3.5 w-3.5" />
-              Réglementation
+              Informations Cadastral
             </TabsTrigger>
           )}
           {tabSettings.showCadastralInfo && (
             <TabsTrigger value="constructibility">
               <Layers className="h-3.5 w-3.5" />
-              Informations Cadastral
+              Réglementation
             </TabsTrigger>
           )}
           {tabSettings.showFeasibility && (
@@ -408,15 +475,18 @@ export function WorkspaceClient({
         {tabSettings.showRegulations && (
           <TabsContent value="analysis">
             <RegulationsTab
-              onAddressSelect={() => {
-                setIsLocationDetected(true);
-              }}
+              mapPreview={mapPreview}
               onLocationInputChange={() => {
                 setIsLocationDetected(false);
               }}
               onLookupParcel={() => {
-                setStatusBanner(null);
-                parcelLookupMutation.mutate();
+                if (!address.trim()) {
+                  analysisStore.setNested("createDtoErrors.address", [
+                    "Veuillez saisir une adresse.",
+                  ]);
+                  return;
+                }
+                parcelLookupMutation.mutate(undefined);
               }}
               isLookingUpParcel={parcelLookupMutation.isPending}
               onSubmit={handleRunAnalysis}
@@ -458,7 +528,6 @@ export function WorkspaceClient({
                 );
               }}
               onReplaySnapshot={(snapshotId) => {
-                setStatusBanner(null);
                 replayMutation.mutate(snapshotId);
               }}
             />

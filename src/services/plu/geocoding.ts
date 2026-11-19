@@ -14,13 +14,115 @@ interface BanFeatureCollection {
   }>
 }
 
+export interface ParsedAddressCadastre {
+  streetAddress: string
+  cadastreSuffix?: string
+  comAbs?: string
+  section?: string
+  numeros: string[]
+}
+
+const CADASTRE_SUFFIX_REGEX = /,?\s*((?:cad(?:astre)?|parc(?:elle|elles)?)\b.*)$/i
+const CADASTRE_REF_REGEX =
+  /(?:cadastre|parcelle|parcelles)\s+(?:(\d{3})\s+)?([a-z0-9]{1,2})\s+([\d,\s.]+)/i
+
+/**
+ * Strip trailing cadastral annotations (e.g. ", cadastre 844 K 39, 49, 50, 51.")
+ * so BAN / Géoplateforme geocoding matches the street address cleanly.
+ */
+export function normalizeAddressQuery(address: string): string {
+  return address.replace(CADASTRE_SUFFIX_REGEX, '').trim()
+}
+
+/**
+ * Parse standalone cadastre input like "49, 50, 51, 256" or "844 K 39, 49, 50, 51".
+ */
+export function parseCadastreInput(raw: string): {
+  comAbs?: string
+  section?: string
+  numeros: string[]
+} {
+  const trimmed = raw.trim()
+  if (!trimmed) return { numeros: [] }
+
+  const withSection = trimmed.match(
+    /^(?:cadastre|parcelles?)?\s*(?:(\d{3})\s+)?([a-z0-9]{1,2})\s+([\d,\s.]+)$/i,
+  )
+  if (withSection) {
+    return {
+      comAbs: withSection[1]?.trim(),
+      section: withSection[2].trim().toUpperCase().padStart(2, '0'),
+      numeros: Array.from(
+        new Set(
+          withSection[3]
+            .split(/[,\s.]+/)
+            .map((n) => n.trim())
+            .filter((n) => /^\d{1,4}$/.test(n))
+            .map((n) => n.padStart(4, '0')),
+        ),
+      ),
+    }
+  }
+
+  return {
+    numeros: Array.from(
+      new Set(
+        trimmed
+          .split(/[,\s.]+/)
+          .map((n) => n.trim())
+          .filter((n) => /^\d{1,4}$/.test(n))
+          .map((n) => n.padStart(4, '0')),
+      ),
+    ),
+  }
+}
+
+/**
+ * Extract street address and optional cadastral parcel references from an address string.
+ */
+export function parseAddressCadastre(address: string): ParsedAddressCadastre {
+  const trimmed = address.trim()
+  const suffixMatch = trimmed.match(CADASTRE_SUFFIX_REGEX)
+  const streetAddress = normalizeAddressQuery(trimmed)
+  const cadastreSuffix = suffixMatch?.[1]?.trim()
+
+  if (!cadastreSuffix) {
+    return { streetAddress, numeros: [] }
+  }
+
+  const refMatch = cadastreSuffix.match(CADASTRE_REF_REGEX)
+  if (!refMatch) {
+    return { streetAddress, cadastreSuffix, numeros: [] }
+  }
+
+  const comAbs = refMatch[1]?.trim()
+  const section = refMatch[2].trim().toUpperCase().padStart(2, '0')
+  const numeros = Array.from(
+    new Set(
+      refMatch[3]
+        .split(/[,\s.]+/)
+        .map((n) => n.trim())
+        .filter((n) => /^\d{1,4}$/.test(n))
+        .map((n) => n.padStart(4, '0')),
+    ),
+  )
+
+  return {
+    streetAddress,
+    cadastreSuffix,
+    comAbs,
+    section,
+    numeros,
+  }
+}
+
 /**
  * Geocode a French address using IGN Géoplateforme / BAN Geocoding API.
  */
 export async function geocodeFrenchAddress(address: string): Promise<GeocodingResult> {
-  const query = address.trim()
+  const query = normalizeAddressQuery(address)
   if (!query) {
-    return { status: 'error', query, error: 'Address query is empty' }
+    return { status: 'error', query: address.trim(), error: 'Address query is empty' }
   }
 
   const baseUrl =

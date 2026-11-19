@@ -38,6 +38,7 @@ export async function fetchAddressSuggestions(
 export async function lookupParcel(input: {
   idu?: string
   address?: string
+  cadastre?: string
   lat?: number
   lng?: number
 }): Promise<ParcelLookupResponse> {
@@ -47,6 +48,9 @@ export async function lookupParcel(input: {
   else if (typeof input.lat === 'number' && typeof input.lng === 'number') {
     params.set('lat', String(input.lat))
     params.set('lng', String(input.lng))
+  }
+  if (input.cadastre?.trim()) {
+    params.set('cadastre', input.cadastre.trim())
   }
   return apiFetch<ParcelLookupResponse>(`/api/plu/parcel-lookup?${params.toString()}`)
 }
