@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -28,8 +29,28 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useIntro } from "@/contexts/IntroProvider";
 
 export function DashboardClient() {
+  const { setIntro, setFloating, clearIntro, clearFloating } = useIntro();
+
+  useEffect(() => {
+    setIntro?.("Tableau de bord", "");
+    setFloating?.(
+      <Button asChild>
+        <Link href="/workspace?new=1">
+          <FolderPlus className="h-4 w-4" />
+          Nouveau projet
+        </Link>
+      </Button>,
+    );
+
+    return () => {
+      clearIntro?.();
+      clearFloating?.();
+    };
+  }, [setIntro, setFloating, clearIntro, clearFloating]);
+
   const projectsQuery = useQuery({
     queryKey: projectKeys.list(24),
     queryFn: () => fetchProjects(24),
@@ -77,23 +98,6 @@ export function DashboardClient() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6">
-      {/* Header */}
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Tableau de bord
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button asChild>
-            <Link href="/projects/new">
-              <FolderPlus className="h-4 w-4" />
-              Nouveau projet
-            </Link>
-          </Button>
-        </div>
-      </div>
-
       {/* KPI Cards */}
       <div
         className="grid grid-cols-2 gap-4 lg:grid-cols-4"

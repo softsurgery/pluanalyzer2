@@ -1,6 +1,5 @@
 import React from "react";
 import { getPayloadWithUser } from "@/lib/payload-auth";
-import { Navbar } from "@/components/layout/Navbar";
 import { LoginPanel } from "@/components/auth/LoginPanel";
 import { ProfileShell } from "@/components/profile/ProfileShell";
 
@@ -15,19 +14,11 @@ export default async function ProfileLayout({
 
   if (!user) {
     return (
-      <>
-        <Navbar user={null} />
-        <main className="px-4 pb-12">
-          <LoginPanel />
-        </main>
-      </>
+      <main className="px-4 pb-12">
+        <LoginPanel />
+      </main>
     );
   }
 
-  return (
-    <>
-      <Navbar user={user} />
-      <ProfileShell user={user}>{children}</ProfileShell>
-    </>
-  );
+  return <ProfileShell user={user}>{children}</ProfileShell>;
 }

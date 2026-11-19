@@ -1,5 +1,4 @@
 import { getPayloadWithUser } from "@/lib/payload-auth";
-import { Navbar } from "@/components/layout/Navbar";
 import { LoginPanel } from "@/components/auth/LoginPanel";
 import { DocumentsClient } from "@/components/DocumentsClient";
 
@@ -10,19 +9,11 @@ export default async function DocumentsPage() {
 
   if (!user) {
     return (
-      <>
-        <Navbar user={null} />
-        <main className="px-4 pb-12">
-          <LoginPanel />
-        </main>
-      </>
+      <main className="px-4 pb-12">
+        <LoginPanel />
+      </main>
     );
   }
 
-  return (
-    <>
-      <Navbar user={user} />
-      <DocumentsClient />
-    </>
-  );
+  return <DocumentsClient />;
 }

@@ -1,6 +1,5 @@
 import { getPayloadWithUser } from "@/lib/payload-auth";
 import { resolveWorkspaceTabSettings } from "@/types/workspace";
-import { Navbar } from "@/components/layout/Navbar";
 import { LoginPanel } from "@/components/auth/LoginPanel";
 import { WorkspaceClient } from "@/components/WorkspaceClient";
 
@@ -9,19 +8,18 @@ export const dynamic = "force-dynamic";
 export default async function WorkspacePage({
   searchParams,
 }: {
-  searchParams: Promise<{ projectId?: string; tab?: string }>;
+  searchParams: Promise<{ projectId?: string; tab?: string; new?: string }>;
 }) {
   const { payload, user } = await getPayloadWithUser();
   const resolvedParams = await searchParams;
+  const isNewProject =
+    resolvedParams.new === "1" || resolvedParams.new === "true";
 
   if (!user) {
     return (
-      <>
-        <Navbar user={null} />
-        <main className="px-4 pb-12">
-          <LoginPanel />
-        </main>
-      </>
+      <main className="px-4 pb-12">
+        <LoginPanel />
+      </main>
     );
   }
 
@@ -38,14 +36,12 @@ export default async function WorkspacePage({
   const tabSettings = resolveWorkspaceTabSettings(workspaceTabs);
 
   return (
-    <>
-      <Navbar user={user} />
-      <WorkspaceClient
-        initialProjectId={resolvedParams.projectId}
-        initialTab={resolvedParams.tab}
-        userRole={user.role}
-        tabSettings={tabSettings}
-      />
-    </>
+    <WorkspaceClient
+      initialProjectId={resolvedParams.projectId}
+      initialTab={resolvedParams.tab}
+      initialIsNewProject={isNewProject}
+      userRole={user.role}
+      tabSettings={tabSettings}
+    />
   );
 }
