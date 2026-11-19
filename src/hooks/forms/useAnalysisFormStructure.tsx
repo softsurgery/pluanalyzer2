@@ -1,117 +1,91 @@
 import { MapPin } from "lucide-react";
-import type { AIModelRecord } from "@/api/ai-models";
 import { fetchAddressSuggestions, type AddressSuggestion } from "@/api/parcels";
-import {
-  MarkerPicker,
-  type MarkerCoordinates,
-} from "@/components/MarkerPicker";
 import {
   CustomFieldProps,
   Field,
   FieldVariant,
   FormStructure,
-  SelectFieldProps,
-  TextareaFieldProps,
   TextFieldProps,
 } from "@/components/shared/form-builder";
 import { InteractiveSelect } from "@/components/ui/interactive-select";
-import type { LocationInputMode } from "@/components/workspace/AnalysisTab";
+import type { LocationInputMode } from "@/components/workspace/RegulationsTab";
 import { AnalysisStore } from "@/hooks/stores/useAnalysisStore";
 import { cn } from "@/lib/utils";
-import type { ParcelRecord } from "@/types/parcels";
-
-const AUTO_PARCEL_VALUE = "__auto__";
-const SYSTEM_DEFAULT_MODEL_VALUE = "__default__";
-
-const LOCATION_MODES: Array<{
-  value: LocationInputMode;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "address",
-    label: "Adresse française",
-    description: "Recherche via BAN / Géoplateforme",
-  },
-  {
-    value: "parcel",
-    label: "IDU Cadastral ou Parcelle enregistrée",
-    description: "Saisie d'IDU ou sélection en base",
-  },
-  {
-    value: "map",
-    label: "Point sur la carte",
-    description: "Sélection directe via MarkerPicker",
-  },
-];
 
 interface AnalysisFormStructureProps {
   analysisStore: AnalysisStore;
-  parcels: ParcelRecord[];
-  aiModels: AIModelRecord[];
   onAddressSelect?: (suggestion: AddressSuggestion) => void;
-  onParcelSelect?: (parcelId: string, parcel?: ParcelRecord) => void;
-  onPickedLocationChange?: (coords: MarkerCoordinates) => void;
+  onLocationInputChange?: () => void;
 }
 
 export const useAnalysisFormStructure = ({
   analysisStore,
-  parcels,
-  aiModels,
   onAddressSelect,
-  onParcelSelect,
-  onPickedLocationChange,
+  onLocationInputChange,
 }: AnalysisFormStructureProps) => {
-  const { locationMode, pickedLocation } = analysisStore.createDto;
+  const { locationMode } = analysisStore.createDto;
   const isAddressMode = locationMode === "address";
   const isParcelMode = locationMode === "parcel";
-  const isMapMode = locationMode === "map";
 
-  const locationModeField: Field<CustomFieldProps> = {
-    id: "ws-location-mode",
+  const handleModeChange = (mode: LocationInputMode) => {
+    analysisStore.setNested("createDto.locationMode", mode);
+    onLocationInputChange?.();
+  };
+
+  const renderModeCard = (
+    mode: LocationInputMode,
+    label: string,
+    description: string,
+  ) => {
+    const checked = locationMode === mode;
+    return (
+      <label
+        className={cn(
+          "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors",
+          checked
+            ? "border-primary bg-primary/5"
+            : "border-input hover:bg-muted/50",
+        )}
+      >
+        <input
+          type="radio"
+          name="location-mode"
+          value={mode}
+          checked={checked}
+          onChange={() => handleModeChange(mode)}
+          className="mt-1 h-4 w-4 accent-primary"
+        />
+        <div className="space-y-0.5">
+          <div className="text-sm font-semibold leading-tight">{label}</div>
+          <div className="text-xs text-muted-foreground">{description}</div>
+        </div>
+      </label>
+    );
+  };
+
+  const addressModeField: Field<CustomFieldProps> = {
+    id: "ws-location-mode-address",
     label: "Mode de localisation de la parcelle",
+    variant: FieldVariant.CUSTOM,
+    props: {
+      children: renderModeCard(
+        "address",
+        "Adresse française",
+        "Recherche via BAN / Géoplateforme",
+      ),
+    },
+  };
+
+  const parcelModeField: Field<CustomFieldProps> = {
+    id: "ws-location-mode-parcel",
+    label: "",
     variant: FieldVariant.CUSTOM,
     description: "Sélectionnez la méthode d'identification de la parcelle.",
     props: {
-      children: (
-        <div className="grid gap-3 sm:grid-cols-3">
-          {LOCATION_MODES.map((mode) => {
-            const checked = locationMode === mode.value;
-            return (
-              <label
-                key={mode.value}
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors",
-                  checked
-                    ? "border-primary bg-primary/5"
-                    : "border-input hover:bg-muted/50",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="location-mode"
-                  value={mode.value}
-                  checked={checked}
-                  onChange={() =>
-                    analysisStore.setNested(
-                      "createDto.locationMode",
-                      mode.value,
-                    )
-                  }
-                  className="mt-1 h-4 w-4 accent-primary"
-                />
-                <div className="space-y-0.5">
-                  <div className="text-sm font-semibold leading-tight">
-                    {mode.label}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {mode.description}
-                  </div>
-                </div>
-              </label>
-            );
-          })}
-        </div>
+      children: renderModeCard(
+        "parcel",
+        "IDU Cadastral",
+        "Saisie de l'identifiant cadastral IGN",
       ),
     },
   };
@@ -131,6 +105,7 @@ export const useAnalysisFormStructure = ({
           onChange={(value) => {
             analysisStore.setNested("createDto.address", value);
             analysisStore.setNested("createDtoErrors.address", []);
+            onLocationInputChange?.();
           }}
           onSelect={onAddressSelect}
           fetchSuggestions={fetchAddressSuggestions}
@@ -174,126 +149,28 @@ export const useAnalysisFormStructure = ({
       onChange: (value) => {
         analysisStore.setNested("createDto.idu", value);
         analysisStore.setNested("createDtoErrors.idu", []);
+        onLocationInputChange?.();
       },
     },
   };
 
-  const parcelField: Field<SelectFieldProps> = {
-    id: "ws-parcel",
-    label: "Ou parcelle enregistrée en base",
-    variant: FieldVariant.SELECT,
-    description: "Choisir une parcelle déjà importée dans Payload.",
-    className: "font-mono",
-    wrapperClassName: cn(!isParcelMode && "opacity-60"),
-    error: analysisStore.createDtoErrors?.selectedParcelId?.[0],
-    props: {
-      disabled: !isParcelMode,
-      value: analysisStore.createDto.selectedParcelId || AUTO_PARCEL_VALUE,
-      onValueChange: (value) => {
-        const nextId = !value || value === AUTO_PARCEL_VALUE ? "" : value;
-        const found = parcels.find((p) => String(p.id) === nextId);
-        analysisStore.setNested("createDto.selectedParcelId", nextId);
-        analysisStore.setNested("createDtoErrors.selectedParcelId", []);
-        onParcelSelect?.(nextId, found);
-      },
-      options: [
-        { label: "— Auto via recherche —", value: AUTO_PARCEL_VALUE },
-        ...parcels.map((p) => ({
-          label: `${p.idu} (${p.surfaceM2 ?? "?"} m²)`,
-          value: String(p.id),
-        })),
-      ],
-    },
-  };
-
-  const mapField: Field<CustomFieldProps> = {
-    id: "ws-map",
-    label: "Sélection directe sur la carte",
-    variant: FieldVariant.CUSTOM,
-    description: "Cliquez sur la carte pour positionner le marqueur.",
-    wrapperClassName: cn(!isMapMode && "opacity-60"),
-    error: analysisStore.createDtoErrors?.pickedLocation?.[0],
-    props: {
-      children: (
-        <MarkerPicker
-          value={pickedLocation}
-          onChange={(coords) => {
-            analysisStore.setNested("createDto.pickedLocation", coords);
-            analysisStore.setNested("createDtoErrors.pickedLocation", []);
-            onPickedLocationChange?.(coords);
-          }}
-          disabled={!isMapMode}
-        />
-      ),
-    },
-  };
-
-  const defaultModel = aiModels.find((m) => m.isDefault);
-  const defaultOptionLabel = defaultModel
-    ? `Par défaut du système (${defaultModel.label || defaultModel.model})`
-    : "Par défaut du système";
-
-  const aiModelField: Field<SelectFieldProps> = {
-    id: "ws-ai-model",
-    label: "Modèle IA",
-    variant: FieldVariant.SELECT,
-    description: "Modèle utilisé pour l'interprétation réglementaire",
-    wrapperClassName: "max-w-md",
-    error: analysisStore.createDtoErrors?.aiModel?.[0],
-    props: {
-      value: analysisStore.createDto.aiModel || SYSTEM_DEFAULT_MODEL_VALUE,
-      onValueChange: (value) => {
-        const nextModel =
-          !value || value === SYSTEM_DEFAULT_MODEL_VALUE ? "" : value;
-        analysisStore.setNested("createDto.aiModel", nextModel);
-        analysisStore.setNested("createDtoErrors.aiModel", []);
-      },
-      options: [
-        { label: defaultOptionLabel, value: SYSTEM_DEFAULT_MODEL_VALUE },
-        ...aiModels.map((m) => ({
-          label: `${m.label ? `${m.label} — ` : ""}${m.model}${m.isDefault ? " (Par défaut)" : ""}`,
-          value: m.model,
-        })),
-      ],
-    },
-  };
-
-  const promptField: Field<TextareaFieldProps> = {
-    id: "ws-prompt",
-    label: "Prompt d'analyse de faisabilité",
-    variant: FieldVariant.TEXTAREA,
-    required: true,
-    description:
-      "Chaque envoi crée une nouvelle version immuable dans l'historique.",
-    error: analysisStore.createDtoErrors?.prompt?.[0],
-    className: "h-60",
-    props: {
-      value: analysisStore.createDto.prompt,
-      onChange: (value) => {
-        analysisStore.setNested("createDto.prompt", value);
-        analysisStore.setNested("createDtoErrors.prompt", []);
-      },
-    },
-  };
-
-  const analysisFormStructure: FormStructure = {
+  const locationFormStructure: FormStructure = {
     title: "",
     description: "",
+    orientation: "vertical",
     fieldsets: [
       {
         gap: 20,
-        rows: [
-          { fields: [locationModeField] },
-          { fields: [addressField, iduField, parcelField] },
-          { fields: [mapField] },
-          { fields: [aiModelField] },
-          { fields: [promptField] },
-        ],
+        rows: [{ fields: [addressModeField] }, { fields: [parcelModeField] }],
+      },
+      {
+        gap: 20,
+        rows: [{ fields: [addressField] }, { fields: [iduField] }],
       },
     ],
   };
 
   return {
-    analysisFormStructure,
+    locationFormStructure,
   };
 };

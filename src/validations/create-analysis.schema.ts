@@ -24,14 +24,10 @@ export const createAnalysisSchema = z
         path: ["address"],
       });
     }
-    if (
-      data.locationMode === "parcel" &&
-      !data.idu.trim() &&
-      !data.selectedParcelId
-    ) {
+    if (data.locationMode === "parcel" && !data.idu.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Veuillez saisir un IDU ou sélectionner une parcelle.",
+        message: "Veuillez saisir un IDU cadastral.",
         path: ["idu"],
       });
     }

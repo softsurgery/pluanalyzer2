@@ -398,9 +398,24 @@ export async function runPluAnalysisPipeline(
       sort: '-isDefault,createdAt',
       limit: 20,
     })
+    let globalDefaultModel: string | undefined
+    try {
+      const workspaceSettings = await payload.findGlobal({
+        slug: 'workspace-settings',
+        depth: 1,
+      })
+      const rel = workspaceSettings?.defaultAiModel
+      if (rel && typeof rel === 'object' && 'model' in rel && typeof rel.model === 'string') {
+        globalDefaultModel = rel.model
+      }
+    } catch {
+      // Ignore if workspace-settings global is not yet initialized
+    }
     const activeModelSlugs = activeModelsResult.docs.map((m) => m.model)
     const defaultActiveModel =
-      activeModelsResult.docs.find((m) => m.isDefault)?.model || activeModelSlugs[0]
+      globalDefaultModel ||
+      activeModelsResult.docs.find((m) => m.isDefault)?.model ||
+      activeModelSlugs[0]
     const resolvedModel =
       input.aiModel?.trim() ||
       defaultActiveModel ||

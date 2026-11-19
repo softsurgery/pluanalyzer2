@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { MarkerCoordinates } from "@/components/MarkerPicker";
-import type { LocationInputMode } from "@/components/workspace/AnalysisTab";
+import type { LocationInputMode } from "@/components/workspace/RegulationsTab";
 import { setNestedValue } from "@/lib/object";
 
 export interface CreateAnalysisDto {

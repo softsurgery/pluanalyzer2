@@ -16,7 +16,10 @@ import {
 } from "lucide-react";
 import type { SnapshotRecord } from "@/types/analyses";
 import type { ParcelRecord } from "@/types/parcels";
-import { aiModelKeys, fetchAiModels } from "@/api/ai-models";
+import {
+  DEFAULT_WORKSPACE_TAB_SETTINGS,
+  type WorkspaceTabSettings,
+} from "@/types/workspace";
 import {
   analysisKeys,
   compareSnapshots,
@@ -24,22 +27,19 @@ import {
   replaySnapshot,
   runAnalysis,
 } from "@/api/analyses";
-import { fetchParcels, lookupParcel, parcelKeys } from "@/api/parcels";
+import { lookupParcel } from "@/api/parcels";
 import { deleteProject, fetchProjects, projectKeys } from "@/api/projects";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AnalysisTab } from "@/components/workspace/AnalysisTab";
-import { useAnalysisStore } from "@/hooks/stores/useAnalysisStore";
-import { createAnalysisSchema, validateForm } from "@/validations";
+import { CadastralInfoTab } from "@/components/workspace/CadastralInfoTab";
 import { CompareTab } from "@/components/workspace/CompareTab";
-import {
-  ConstructibilityTab,
-  type MapPreviewState,
-} from "@/components/workspace/ConstructibilityTab";
+import { FeasibilityTab } from "@/components/workspace/FeasibilityTab";
 import { HistoryTab } from "@/components/workspace/HistoryTab";
 import { JsonInspectorTab } from "@/components/workspace/JsonInspectorTab";
 import { RegulationsTab } from "@/components/workspace/RegulationsTab";
 import { SettingsTab } from "@/components/workspace/SettingsTab";
+import { useAnalysisStore } from "@/hooks/stores/useAnalysisStore";
+import { createAnalysisSchema, validateForm } from "@/validations";
 
 export type { ParcelRecord, SnapshotRecord };
 
@@ -47,6 +47,7 @@ interface WorkspaceClientProps {
   initialProjectId?: string;
   initialTab?: string;
   userRole?: string;
+  tabSettings?: WorkspaceTabSettings;
 }
 
 type TabKey =
@@ -58,26 +59,61 @@ type TabKey =
   | "json"
   | "settings";
 
-const VALID_TABS: readonly TabKey[] = [
+const SELECTABLE_TABS: readonly Exclude<TabKey, "json">[] = [
   "analysis",
   "constructibility",
   "regulations",
   "history",
   "compare",
-  "json",
   "settings",
 ];
 
-function resolveTabKey(tab?: string): TabKey {
-  return VALID_TABS.includes(tab as TabKey)
-    ? (tab as TabKey)
-    : "constructibility";
+function isTabEnabled(
+  tab: TabKey,
+  tabSettings: WorkspaceTabSettings,
+): boolean {
+  switch (tab) {
+    case "analysis":
+      return tabSettings.showRegulations;
+    case "constructibility":
+      return tabSettings.showCadastralInfo;
+    case "regulations":
+      return tabSettings.showFeasibility;
+    case "history":
+      return tabSettings.showHistory;
+    case "compare":
+      return tabSettings.showCompare;
+    case "settings":
+      return tabSettings.showSettings;
+    case "json":
+      return false;
+  }
+}
+
+function resolveTabKey(
+  tab: string | undefined,
+  tabSettings: WorkspaceTabSettings,
+): TabKey {
+  if (
+    tab &&
+    SELECTABLE_TABS.includes(tab as Exclude<TabKey, "json">) &&
+    isTabEnabled(tab as TabKey, tabSettings)
+  ) {
+    return tab as TabKey;
+  }
+  if (isTabEnabled("constructibility", tabSettings)) {
+    return "constructibility";
+  }
+  return (
+    SELECTABLE_TABS.find((t) => isTabEnabled(t, tabSettings)) ?? "analysis"
+  );
 }
 
 export function WorkspaceClient({
   initialProjectId,
   initialTab,
   userRole,
+  tabSettings = DEFAULT_WORKSPACE_TAB_SETTINGS,
 }: WorkspaceClientProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -85,7 +121,7 @@ export function WorkspaceClient({
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<TabKey>(() =>
-    resolveTabKey(initialTab),
+    resolveTabKey(initialTab, tabSettings),
   );
   const [projectId, setProjectId] = useState<string>(initialProjectId || "");
   const [activeSnapshot, setActiveSnapshot] = useState<SnapshotRecord | null>(
@@ -94,15 +130,7 @@ export function WorkspaceClient({
 
   // Form state (Zustand)
   const analysisStore = useAnalysisStore();
-  const {
-    locationMode,
-    address,
-    idu,
-    selectedParcelId,
-    pickedLocation,
-    aiModel,
-    prompt,
-  } = analysisStore.createDto;
+  const { locationMode, address, idu, prompt } = analysisStore.createDto;
 
   useEffect(() => {
     analysisStore.setNested("createDto.projectId", projectId);
@@ -112,9 +140,7 @@ export function WorkspaceClient({
     type: "ok" | "err";
     text: string;
   } | null>(null);
-
-  // Map preview state
-  const [mapPreview, setMapPreview] = useState<MapPreviewState>({});
+  const [isLocationDetected, setIsLocationDetected] = useState<boolean>(false);
 
   // Comparison state
   const [compareA, setCompareA] = useState<string>("");
@@ -130,16 +156,6 @@ export function WorkspaceClient({
     queryFn: () => fetchProjects(50),
   });
 
-  const parcelsQuery = useQuery({
-    queryKey: parcelKeys.list(50),
-    queryFn: () => fetchParcels(50),
-  });
-
-  const aiModelsQuery = useQuery({
-    queryKey: aiModelKeys.all,
-    queryFn: fetchAiModels,
-  });
-
   const snapshotsQuery = useQuery({
     queryKey: analysisKeys.snapshots(projectId || undefined),
     queryFn: () => fetchSnapshots(projectId || undefined, 50),
@@ -147,8 +163,6 @@ export function WorkspaceClient({
   });
 
   const projects = projectsQuery.data?.docs ?? [];
-  const parcels = parcelsQuery.data?.docs ?? [];
-  const aiModels = aiModelsQuery.data?.docs ?? [];
   const snapshots = snapshotsQuery.data?.docs ?? [];
 
   useEffect(() => {
@@ -156,19 +170,6 @@ export function WorkspaceClient({
       setProjectId(String(projects[0].id));
     }
   }, [projectId, projects]);
-
-  useEffect(() => {
-    if (parcels.length > 0 && !selectedParcelId && !mapPreview.label) {
-      const p = parcels[0];
-      analysisStore.setNested("createDto.selectedParcelId", String(p.id));
-      setMapPreview((prev) => ({
-        ...prev,
-        centroid: p.centroid,
-        geometry: p.geometry,
-        label: `${p.idu} (${p.surfaceM2 ?? "?"} m²)`,
-      }));
-    }
-  }, [parcels, selectedParcelId, mapPreview.label]);
 
   useEffect(() => {
     if (snapshots.length === 0) {
@@ -192,6 +193,7 @@ export function WorkspaceClient({
   const canDeleteProject = userRole !== "viewer";
 
   const handleTabChange = (nextTab: TabKey) => {
+    if (!isTabEnabled(nextTab, tabSettings)) return;
     setActiveTab(nextTab);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", nextTab);
@@ -201,12 +203,6 @@ export function WorkspaceClient({
   // Mutations
   const parcelLookupMutation = useMutation({
     mutationFn: () => {
-      if (locationMode === "map" && pickedLocation) {
-        return lookupParcel({
-          lat: pickedLocation.lat,
-          lng: pickedLocation.lng,
-        });
-      }
       if (locationMode === "parcel") {
         return lookupParcel({ idu });
       }
@@ -214,12 +210,7 @@ export function WorkspaceClient({
     },
     onSuccess: (data) => {
       if (data.parcel?.status === "ok") {
-        setMapPreview({
-          centroid: data.parcel.centroid,
-          geometry: data.parcel.geometry,
-          label: `${data.parcel.idu} (${data.parcel.surfaceM2 ?? "?"} m²)`,
-          zoneCode: data.gpu?.zoneCode,
-        });
+        setIsLocationDetected(true);
         if (data.parcel.idu) {
           analysisStore.setNested("createDto.idu", data.parcel.idu);
         }
@@ -228,16 +219,13 @@ export function WorkspaceClient({
           text: `Parcelle localisée : ${data.parcel.idu} · Surface ${data.parcel.surfaceM2 ?? "?"} m² · Zone GPU : ${data.gpu?.zoneCode || "non détectée"}`,
         });
       } else if (data.geocoding?.coordinates) {
-        setMapPreview({
-          centroid: data.geocoding.coordinates,
-          label: data.geocoding.label,
-          zoneCode: data.gpu?.zoneCode,
-        });
+        setIsLocationDetected(true);
         setStatusBanner({
           type: "ok",
           text: `Adresse géocodée (${data.geocoding.label}), parcelle cadastrale non retournée par IGN.`,
         });
       } else {
+        setIsLocationDetected(false);
         setStatusBanner({
           type: "err",
           text: "Aucune parcelle trouvée pour cette recherche.",
@@ -245,6 +233,7 @@ export function WorkspaceClient({
       }
     },
     onError: (err) => {
+      setIsLocationDetected(false);
       setStatusBanner({
         type: "err",
         text:
@@ -260,23 +249,11 @@ export function WorkspaceClient({
       const base = {
         projectId: Number(projectId),
         prompt,
-        aiModel: aiModel || undefined,
       };
-      if (locationMode === "map" && pickedLocation) {
-        return runAnalysis({
-          ...base,
-          lat: pickedLocation.lat,
-          lng: pickedLocation.lng,
-        });
-      }
       if (locationMode === "parcel") {
         return runAnalysis({
           ...base,
           idu: idu.trim() || undefined,
-          parcelId:
-            !idu.trim() && selectedParcelId
-              ? Number(selectedParcelId)
-              : undefined,
         });
       }
       return runAnalysis({
@@ -352,6 +329,16 @@ export function WorkspaceClient({
     const result = validateForm(createAnalysisSchema, analysisStore.createDto);
     if (!result.success) {
       analysisStore.set("createDtoErrors", result.errors);
+      const locationError =
+        result.errors.address?.[0] ||
+        result.errors.idu?.[0] ||
+        result.errors.selectedParcelId?.[0];
+      if (locationError) {
+        setStatusBanner({
+          type: "err",
+          text: `${locationError} (onglet Réglementation)`,
+        });
+      }
       return;
     }
     analysisStore.set("createDtoErrors", {});
@@ -376,141 +363,147 @@ export function WorkspaceClient({
         onValueChange={(v) => handleTabChange(v as TabKey)}
       >
         <TabsList>
-          <TabsTrigger value="analysis">
-            <Search className="h-3.5 w-3.5" />
-            Analyse & Parcelle
-          </TabsTrigger>
-          <TabsTrigger value="constructibility">
-            <Layers className="h-3.5 w-3.5" />
-            Constructibilité & Carte
-          </TabsTrigger>
-          <TabsTrigger value="regulations">
-            <FileText className="h-3.5 w-3.5" />
-            Réglementation & Validation
-          </TabsTrigger>
-          <TabsTrigger value="history">
-            <History className="h-3.5 w-3.5" />
-            Historique ({snapshots.length})
-          </TabsTrigger>
-          <TabsTrigger value="compare">
-            <GitCompare className="h-3.5 w-3.5" />
-            Comparaison
-          </TabsTrigger>
-          <TabsTrigger value="json">
+          {tabSettings.showRegulations && (
+            <TabsTrigger value="analysis">
+              <Search className="h-3.5 w-3.5" />
+              Réglementation
+            </TabsTrigger>
+          )}
+          {tabSettings.showCadastralInfo && (
+            <TabsTrigger value="constructibility">
+              <Layers className="h-3.5 w-3.5" />
+              Informations Cadastral
+            </TabsTrigger>
+          )}
+          {tabSettings.showFeasibility && (
+            <TabsTrigger value="regulations">
+              <FileText className="h-3.5 w-3.5" />
+              Faisabilité
+            </TabsTrigger>
+          )}
+          {tabSettings.showHistory && (
+            <TabsTrigger value="history">
+              <History className="h-3.5 w-3.5" />
+              Historique ({snapshots.length})
+            </TabsTrigger>
+          )}
+          {tabSettings.showCompare && (
+            <TabsTrigger value="compare">
+              <GitCompare className="h-3.5 w-3.5" />
+              Comparaison
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="json" disabled>
             <Code2 className="h-3.5 w-3.5" />
             Inspecteur JSON
           </TabsTrigger>
-          <TabsTrigger value="settings">
-            <Settings className="h-3.5 w-3.5" />
-            Paramètres
-          </TabsTrigger>
+          {tabSettings.showSettings && (
+            <TabsTrigger value="settings">
+              <Settings className="h-3.5 w-3.5" />
+              Paramètres
+            </TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="analysis">
-          <AnalysisTab
-            parcels={parcels}
-            aiModels={aiModels}
-            onAddressSelect={(suggestion) => {
-              setMapPreview((prev) => ({
-                ...prev,
-                centroid: suggestion.coordinates,
-                label: suggestion.label,
-              }));
-            }}
-            onParcelSelect={(_nextId, found) => {
-              if (found) {
-                setMapPreview({
-                  centroid: found.centroid,
-                  geometry: found.geometry,
-                  label: `${found.idu} (${found.surfaceM2 ?? "?"} m²)`,
-                });
-              }
-            }}
-            onPickedLocationChange={(coords) => {
-              setMapPreview((prev) => ({
-                ...prev,
-                centroid: coords,
-                label: `Point (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})`,
-              }));
-            }}
-            onLookupParcel={() => {
-              setStatusBanner(null);
-              parcelLookupMutation.mutate();
-            }}
-            isLookingUpParcel={parcelLookupMutation.isPending}
-            onSubmit={handleRunAnalysis}
-            isRunningAnalysis={runAnalysisMutation.isPending}
-          />
-        </TabsContent>
+        {tabSettings.showRegulations && (
+          <TabsContent value="analysis">
+            <RegulationsTab
+              onAddressSelect={() => {
+                setIsLocationDetected(true);
+              }}
+              onLocationInputChange={() => {
+                setIsLocationDetected(false);
+              }}
+              onLookupParcel={() => {
+                setStatusBanner(null);
+                parcelLookupMutation.mutate();
+              }}
+              isLookingUpParcel={parcelLookupMutation.isPending}
+              onSubmit={handleRunAnalysis}
+              isRunningAnalysis={runAnalysisMutation.isPending}
+              isLocationDetected={isLocationDetected}
+            />
+          </TabsContent>
+        )}
 
-        <TabsContent value="constructibility">
-          <ConstructibilityTab
-            mapPreview={mapPreview}
-            activeSnapshot={activeSnapshot}
-            isLoading={snapshotsQuery.isLoading}
-          />
-        </TabsContent>
+        {tabSettings.showCadastralInfo && (
+          <TabsContent value="constructibility">
+            <CadastralInfoTab
+              activeSnapshot={activeSnapshot}
+              isLoading={snapshotsQuery.isLoading}
+            />
+          </TabsContent>
+        )}
 
-        <TabsContent value="regulations">
-          <RegulationsTab
-            activeSnapshot={activeSnapshot}
-            isLoading={snapshotsQuery.isLoading}
-          />
-        </TabsContent>
+        {tabSettings.showFeasibility && (
+          <TabsContent value="regulations">
+            <FeasibilityTab />
+          </TabsContent>
+        )}
 
-        <TabsContent value="history">
-          <HistoryTab
-            snapshots={snapshots}
-            activeSnapshot={activeSnapshot}
-            isLoading={snapshotsQuery.isLoading}
-            isReplaying={replayMutation.isPending}
-            replayingSnapshotId={replayMutation.variables}
-            onReopenSnapshot={(snap) => {
-              setActiveSnapshot(snap);
-              handleTabChange("constructibility");
-            }}
-            onReplaySnapshot={(snapshotId) => {
-              setStatusBanner(null);
-              replayMutation.mutate(snapshotId);
-            }}
-          />
-        </TabsContent>
+        {tabSettings.showHistory && (
+          <TabsContent value="history">
+            <HistoryTab
+              snapshots={snapshots}
+              activeSnapshot={activeSnapshot}
+              isLoading={snapshotsQuery.isLoading}
+              isReplaying={replayMutation.isPending}
+              replayingSnapshotId={replayMutation.variables}
+              onReopenSnapshot={(snap) => {
+                setActiveSnapshot(snap);
+                handleTabChange(
+                  isTabEnabled("constructibility", tabSettings)
+                    ? "constructibility"
+                    : resolveTabKey(undefined, tabSettings),
+                );
+              }}
+              onReplaySnapshot={(snapshotId) => {
+                setStatusBanner(null);
+                replayMutation.mutate(snapshotId);
+              }}
+            />
+          </TabsContent>
+        )}
 
-        <TabsContent value="compare">
-          <CompareTab
-            snapshots={snapshots}
-            compareA={compareA}
-            compareB={compareB}
-            onCompareAChange={setCompareA}
-            onCompareBChange={setCompareB}
-            onCompare={() => compareMutation.mutate()}
-            isComparing={compareMutation.isPending}
-            compareResult={compareResult}
-          />
-        </TabsContent>
+        {tabSettings.showCompare && (
+          <TabsContent value="compare">
+            <CompareTab
+              snapshots={snapshots}
+              compareA={compareA}
+              compareB={compareB}
+              onCompareAChange={setCompareA}
+              onCompareBChange={setCompareB}
+              onCompare={() => compareMutation.mutate()}
+              isComparing={compareMutation.isPending}
+              compareResult={compareResult}
+            />
+          </TabsContent>
+        )}
 
         <TabsContent value="json">
           <JsonInspectorTab activeSnapshot={activeSnapshot} />
         </TabsContent>
 
-        <TabsContent value="settings">
-          <SettingsTab
-            currentProject={currentProject}
-            activeSnapshot={activeSnapshot}
-            isLoading={projectsQuery.isLoading}
-            isSnapshotLoading={snapshotsQuery.isLoading}
-            userRole={userRole}
-            canDeleteProject={canDeleteProject}
-            isDeleting={deleteProjectMutation.isPending}
-            deleteError={
-              deleteProjectMutation.isError &&
-              deleteProjectMutation.error instanceof Error
-                ? deleteProjectMutation.error
-                : null
-            }
-            onDeleteProject={(id) => deleteProjectMutation.mutate(id)}
-          />
-        </TabsContent>
+        {tabSettings.showSettings && (
+          <TabsContent value="settings">
+            <SettingsTab
+              currentProject={currentProject}
+              activeSnapshot={activeSnapshot}
+              isLoading={projectsQuery.isLoading}
+              isSnapshotLoading={snapshotsQuery.isLoading}
+              userRole={userRole}
+              canDeleteProject={canDeleteProject}
+              isDeleting={deleteProjectMutation.isPending}
+              deleteError={
+                deleteProjectMutation.isError &&
+                deleteProjectMutation.error instanceof Error
+                  ? deleteProjectMutation.error
+                  : null
+              }
+              onDeleteProject={(id) => deleteProjectMutation.mutate(id)}
+            />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

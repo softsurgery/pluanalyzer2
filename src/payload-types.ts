@@ -105,8 +105,12 @@ export interface Config {
     defaultIDType: number;
   };
   fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    'workspace-settings': WorkspaceSetting;
+  };
+  globalsSelect: {
+    'workspace-settings': WorkspaceSettingsSelect<false> | WorkspaceSettingsSelect<true>;
+  };
   locale: null;
   widgets: {
     collections: CollectionsWidget;
@@ -971,6 +975,49 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * Configurer la visibilité des onglets et le modèle IA global utilisé dans le workspace. L’onglet Inspecteur JSON reste toujours désactivé.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "workspace-settings".
+ */
+export interface WorkspaceSetting {
+  id: number;
+  /**
+   * Modèle IA utilisé globalement pour toutes les analyses PLU (si non défini, le modèle marqué par défaut dans AI Models est utilisé).
+   */
+  defaultAiModel?: (number | null) | AiModel;
+  tabs?: {
+    showRegulations?: boolean | null;
+    showCadastralInfo?: boolean | null;
+    showFeasibility?: boolean | null;
+    showHistory?: boolean | null;
+    showCompare?: boolean | null;
+    showSettings?: boolean | null;
+  };
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "workspace-settings_select".
+ */
+export interface WorkspaceSettingsSelect<T extends boolean = true> {
+  defaultAiModel?: T;
+  tabs?:
+    | T
+    | {
+        showRegulations?: T;
+        showCadastralInfo?: T;
+        showFeasibility?: T;
+        showHistory?: T;
+        showCompare?: T;
+        showSettings?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
