@@ -168,7 +168,7 @@ export function MarkerPicker({
     <div className={cn("space-y-2", className)}>
       <div
         className={cn(
-          "relative h-[680px] w-full overflow-hidden rounded-xl border bg-card shadow-sm transition-opacity",
+          "relative z-0 isolate h-[680px] w-full overflow-hidden rounded-xl border bg-card shadow-sm transition-opacity",
           disabled ? "cursor-not-allowed opacity-50" : "cursor-crosshair",
         )}
       >
