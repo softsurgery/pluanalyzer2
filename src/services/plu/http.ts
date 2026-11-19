@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 export interface HttpFetchOptions {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   headers?: Record<string, string>
   body?: string
   timeoutMs?: number

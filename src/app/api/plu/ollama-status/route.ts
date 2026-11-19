@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { fetchOpenRouterQuota } from '@/api/openrouter'
 import { getPayloadWithUser } from '@/lib/payload-auth'
+import { getOllamaService } from '@/services/ollama/OllamaService'
 
 export async function GET() {
   try {
@@ -12,12 +12,12 @@ export async function GET() {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
 
-    const quota = await fetchOpenRouterQuota()
-    if (!quota.ok) {
-      return NextResponse.json(quota, { status: 502 })
+    const status = await getOllamaService().healthCheck()
+    if (!status.ok) {
+      return NextResponse.json(status, { status: 502 })
     }
 
-    return NextResponse.json(quota)
+    return NextResponse.json(status)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'
     return NextResponse.json({ ok: false, error: message }, { status: 500 })

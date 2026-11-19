@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import {
-  createOpenRouterChatCompletion,
-  getOpenRouterConfig,
-} from '@/api/openrouter'
+import { getOllamaService } from '@/services/ollama/OllamaService'
 import { getPayloadWithUser } from '@/lib/payload-auth'
 
 const TestAiSchema = z.object({
@@ -31,13 +28,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const { apiKey, defaultModel } = getOpenRouterConfig()
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'OPENROUTER_API_KEY is not configured' },
-        { status: 500 },
-      )
-    }
+    const ollama = getOllamaService()
+    const { defaultModel } = ollama.getConfig()
 
     let resolvedModel = parsed.data.modelSlug?.trim() || ''
 
@@ -82,26 +74,25 @@ export async function POST(request: Request) {
     }
 
     const startedAt = Date.now()
-    console.log(`[OpenRouter Test] Sending test prompt to model=${resolvedModel}`)
+    console.log(`[Ollama Test] Sending test prompt to model=${resolvedModel}`)
 
-    const res = await createOpenRouterChatCompletion({
+    const res = await ollama.chat({
       model: resolvedModel,
       temperature: 0.1,
       messages: [{ role: 'user', content: parsed.data.prompt }],
       timeoutMs: 45000,
-      title: 'PLU Analyzer Platform - Admin AI Test',
     })
 
     const durationMs = Date.now() - startedAt
 
     if (!res.ok) {
-      console.warn(`[OpenRouter Test] Failed (${durationMs}ms): ${res.error}`)
+      console.warn(`[Ollama Test] Failed (${durationMs}ms): ${res.error}`)
       return NextResponse.json(
         {
           ok: false,
           model: resolvedModel,
           durationMs,
-          error: res.error || 'OpenRouter API error',
+          error: res.error || 'Ollama API error',
         },
         { status: 502 },
       )
@@ -109,7 +100,7 @@ export async function POST(request: Request) {
 
     const reply = res.content ?? ''
     console.log(
-      `[OpenRouter Test] Succeeded in ${durationMs}ms (model=${res.model}, chars=${reply.length})`,
+      `[Ollama Test] Succeeded in ${durationMs}ms (model=${res.model}, chars=${reply.length})`,
     )
 
     return NextResponse.json({
@@ -117,6 +108,8 @@ export async function POST(request: Request) {
       model: res.model,
       durationMs,
       reply,
+      thinking: res.thinking,
+      metrics: res.metrics,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'

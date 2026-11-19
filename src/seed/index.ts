@@ -55,7 +55,7 @@ export async function seedDatabase(payload: Payload) {
     plannerUserId = anyUser.docs[0].id
   }
 
-  // 1b. Seed Free OpenRouter AI Models
+  // 1b. Seed Default Ollama AI Models
   await seedAiModels(payload)
 
   // 2. Seed Sample Parcel (Aix-en-Provence)

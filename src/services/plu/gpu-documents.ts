@@ -1,7 +1,16 @@
-import axios from 'axios'
 import { fetchJsonWithTimeout } from '@/services/plu/http'
 import { extractPdfTextAndArticles, parsePluArticles } from '@/services/plu/pdf-extractor'
 import type { ExtractedArticle, GPUDocumentInfo, GPUDocumentsResult } from '@/services/plu/types'
+
+const MAX_GPU_PDF_BYTES = 100 * 1024 * 1024
+const GPU_PDF_FETCH_TIMEOUT_MS = 120000
+const MAX_CACHED_GPU_PDFS = 10
+
+// In-memory cache of extracted text & articles keyed by PDF URL to avoid re-downloading large (50+ MB) PLUi PDFs
+const gpuPdfExtractionCache = new Map<
+  string,
+  { url: string; text: string; articles: ExtractedArticle[] }
+>()
 
 interface GpuApiDocument {
   id?: string
@@ -33,34 +42,10 @@ export async function fetchGpuDocuments(
     : `${baseUrl}/document?grid=${encodeURIComponent(cleanInsee)}`
 
   const res = await fetchJsonWithTimeout<GpuApiDocument[]>(url, { timeoutMs: 12000 })
+  const docs = res.ok && Array.isArray(res.data) ? mapGpuDocs(res.data) : []
 
-  if (!res.ok) {
-    // Fallback to municipality documents endpoint
-    const fallbackUrl = `${baseUrl}/municipality/${encodeURIComponent(cleanInsee)}/documents`
-    const fallbackRes = await fetchJsonWithTimeout<GpuApiDocument[]>(fallbackUrl, {
-      timeoutMs: 12000,
-    })
-
-    if (!fallbackRes.ok) {
-      return {
-        status: 'error',
-        communeInsee: cleanInsee,
-        documents: [],
-        error: fallbackRes.error || res.error || 'GPU API request failed',
-      }
-    }
-
-    const docs = mapGpuDocs(fallbackRes.data || [])
-    return {
-      status: docs.length > 0 ? 'ok' : 'not_found',
-      communeInsee: cleanInsee,
-      documents: docs,
-      raw: fallbackRes.data,
-    }
-  }
-
-  const docs = mapGpuDocs(Array.isArray(res.data) ? res.data : [])
-  if (docs.length === 0 && partition) {
+  // If partition lookup failed or returned no documents, fall back to the commune INSEE grid endpoint
+  if (partition && (!res.ok || docs.length === 0)) {
     const gridUrl = `${baseUrl}/document?grid=${encodeURIComponent(cleanInsee)}`
     const gridRes = await fetchJsonWithTimeout<GpuApiDocument[]>(gridUrl, { timeoutMs: 12000 })
     if (gridRes.ok && Array.isArray(gridRes.data)) {
@@ -71,6 +56,21 @@ export async function fetchGpuDocuments(
         documents: gridDocs,
         raw: gridRes.data,
       }
+    }
+    return {
+      status: 'error',
+      communeInsee: cleanInsee,
+      documents: [],
+      error: gridRes.error || res.error || 'GPU API request failed',
+    }
+  }
+
+  if (!res.ok) {
+    return {
+      status: 'error',
+      communeInsee: cleanInsee,
+      documents: [],
+      error: res.error || 'GPU API request failed',
     }
   }
 
@@ -85,8 +85,6 @@ export async function fetchGpuDocuments(
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
-
-const MAX_GPU_PDF_BYTES = 100 * 1024 * 1024
 
 export async function fetchGpuRegulationPdfText(params: {
   gpuDocId?: string
@@ -124,62 +122,93 @@ export async function fetchGpuRegulationPdfText(params: {
   }
 
   let pdfUrl = candidateUrls[0]
-  let pdfBuffer: Buffer | null = null
-  let lastError = 'Failed to fetch GPU regulation PDF'
+  let cachedExtraction: { url: string; text: string; articles: ExtractedArticle[] } | undefined
 
   for (const candidateUrl of candidateUrls) {
-    pdfUrl = candidateUrl
-    try {
-      console.log(`[GPU PDF] Fetching regulation PDF: ${candidateUrl}`)
-      const response = await axios.get<ArrayBuffer>(candidateUrl, {
-        responseType: 'arraybuffer',
-        timeout: 60000,
-        headers: { Accept: 'application/pdf,*/*' },
-        validateStatus: () => true,
-      })
-      if (response.status < 200 || response.status >= 300) {
-        lastError = `HTTP ${response.status} fetching GPU PDF`
-        console.warn(`[GPU PDF] ${candidateUrl} failed: ${lastError}`)
-        continue
-      }
-
-      const buf = Buffer.isBuffer(response.data)
-        ? response.data
-        : Buffer.from(response.data)
-      if (buf.byteLength === 0 || buf.byteLength > MAX_GPU_PDF_BYTES) {
-        lastError = `GPU PDF size out of bounds (${buf.byteLength} bytes)`
-        console.warn(`[GPU PDF] ${candidateUrl} skipped: ${lastError}`)
-        continue
-      }
-
-      console.log(
-        `[GPU PDF] Downloaded ${(buf.byteLength / (1024 * 1024)).toFixed(1)} MB from ${candidateUrl}`,
-      )
-      pdfBuffer = buf
+    const hit = gpuPdfExtractionCache.get(candidateUrl)
+    if (hit) {
+      console.log(`[GPU PDF] Using cached extraction for ${candidateUrl}`)
+      cachedExtraction = hit
+      pdfUrl = hit.url
       break
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : 'Failed to fetch GPU regulation PDF'
-      console.warn(`[GPU PDF] ${candidateUrl} error: ${lastError}`)
     }
   }
 
-  if (!pdfBuffer) {
+  let pdfBuffer: Buffer | null = null
+  let lastError = 'Failed to fetch GPU regulation PDF'
+
+  if (!cachedExtraction) {
+    for (const candidateUrl of candidateUrls) {
+      pdfUrl = candidateUrl
+      try {
+        console.log(`[GPU PDF] Fetching regulation PDF: ${candidateUrl}`)
+        const response = await fetch(candidateUrl, {
+          method: 'GET',
+          headers: { Accept: 'application/pdf,*/*' },
+          signal: AbortSignal.timeout(GPU_PDF_FETCH_TIMEOUT_MS),
+        })
+        if (!response.ok) {
+          lastError = `HTTP ${response.status} fetching GPU PDF`
+          console.warn(`[GPU PDF] ${candidateUrl} failed: ${lastError}`)
+          continue
+        }
+
+        const arrayBuf = await response.arrayBuffer()
+        const buf = Buffer.from(arrayBuf)
+        if (buf.byteLength === 0 || buf.byteLength > MAX_GPU_PDF_BYTES) {
+          lastError = `GPU PDF size out of bounds (${buf.byteLength} bytes)`
+          console.warn(`[GPU PDF] ${candidateUrl} skipped: ${lastError}`)
+          continue
+        }
+
+        console.log(
+          `[GPU PDF] Downloaded ${(buf.byteLength / (1024 * 1024)).toFixed(1)} MB from ${candidateUrl}`,
+        )
+        pdfBuffer = buf
+        break
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : 'Failed to fetch GPU regulation PDF'
+        console.warn(`[GPU PDF] ${candidateUrl} error: ${lastError}`)
+      }
+    }
+  }
+
+  if (!cachedExtraction && !pdfBuffer) {
     return { url: pdfUrl, articles: [], error: lastError }
   }
 
   try {
-    const extraction = await extractPdfTextAndArticles(pdfBuffer)
-    if (extraction.articles.length === 0 && !extraction.text) {
-      return { url: pdfUrl, articles: [], error: extraction.error || 'No text extracted from GPU PDF' }
+    let extractionText: string
+    let extractionArticles: ExtractedArticle[]
+
+    if (cachedExtraction) {
+      extractionText = cachedExtraction.text
+      extractionArticles = cachedExtraction.articles
+    } else {
+      const extraction = await extractPdfTextAndArticles(pdfBuffer!)
+      if (extraction.articles.length === 0 && !extraction.text) {
+        return { url: pdfUrl, articles: [], error: extraction.error || 'No text extracted from GPU PDF' }
+      }
+      extractionText = extraction.text
+      extractionArticles = extraction.articles
+
+      if (gpuPdfExtractionCache.size >= MAX_CACHED_GPU_PDFS) {
+        const oldestKey = gpuPdfExtractionCache.keys().next().value
+        if (oldestKey) gpuPdfExtractionCache.delete(oldestKey)
+      }
+      gpuPdfExtractionCache.set(pdfUrl, {
+        url: pdfUrl,
+        text: extractionText,
+        articles: extractionArticles,
+      })
     }
 
     if (params.zoneCode) {
       const zonePattern = escapeRegExp(params.zoneCode)
-      const zoneRegex = new RegExp(`\\b${zonePattern}\\b`, 'i')
       const headerZoneRegex = new RegExp(`\\b${zonePattern}\\b`, 'i')
       const regKeywords = /(?:hauteur|emprise|recul|alignement|stationnement|pleine\s+terre|fa[îi]tage|m[èe]tres?|\d+\s*%)/i
 
-      const scored = extraction.articles
+      const scored = extractionArticles
         .map((a) => {
           let score = 0
           if (headerZoneRegex.test(a.articleNumber) || headerZoneRegex.test(a.title)) score += 12
@@ -198,17 +227,17 @@ export async function fetchGpuRegulationPdfText(params: {
         `(?:(?:ZONE|CHAPITRE|DISPOSITIONS\\s+APPLICABLES\\s+[ÀA]\\s+LA\\s+ZONE)\\s+${zonePattern}\\b|^\\s*${zonePattern}\\s*$)`,
         'gim',
       )
-      const headingMatches = [...extraction.text.matchAll(zoneHeadingRegex)]
+      const headingMatches = [...extractionText.matchAll(zoneHeadingRegex)]
       const bodyMatch =
         headingMatches.find((m) => {
           const idx = m.index ?? 0
-          const preview = extraction.text.slice(idx, idx + 1500)
+          const preview = extractionText.slice(idx, idx + 1500)
           return regKeywords.test(preview)
         }) || headingMatches[Math.min(1, Math.max(0, headingMatches.length - 1))]
 
       const sectionArticles: ExtractedArticle[] = []
       if (bodyMatch && typeof bodyMatch.index === 'number') {
-        const slice = extraction.text.slice(bodyMatch.index, bodyMatch.index + 18000)
+        const slice = extractionText.slice(bodyMatch.index, bodyMatch.index + 18000)
         sectionArticles.push(...parsePluArticles(slice))
       }
 
@@ -228,7 +257,7 @@ export async function fetchGpuRegulationPdfText(params: {
       }
     }
 
-    return { url: pdfUrl, articles: extraction.articles.slice(0, 15) }
+    return { url: pdfUrl, articles: extractionArticles.slice(0, 15) }
   } catch (err) {
     return {
       url: pdfUrl,

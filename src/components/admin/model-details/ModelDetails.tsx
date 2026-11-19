@@ -17,7 +17,7 @@ export const ModelDetails = ({ className }: ModelDetailsProps) => {
     <div className={cn("field-type textarea mb-6", className)}>
       <FieldLabel
         htmlFor="field-aiResponsivenessTest"
-        label="Test de réactivité IA & Quota OpenRouter"
+        label="Test de réactivité IA & Consommation des Modèles"
       />
       <div className="flex flex-col gap-4 mt-2">
         <ModelTest onTestComplete={() => setRefreshTrigger((n) => n + 1)} />

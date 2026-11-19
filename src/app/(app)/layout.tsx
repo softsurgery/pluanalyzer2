@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 export const metadata: Metadata = {
   title: 'PLU Analyzer — Urban-Planning Feasibility Platform',
   description:
-    'French PLU/PLUi feasibility intelligence powered by Payload CMS, PostgreSQL, IGN API Carto, Métropole Aix-Marseille-Provence, and OpenRouter.',
+    'French PLU/PLUi feasibility intelligence powered by Payload CMS, PostgreSQL, IGN API Carto, Métropole Aix-Marseille-Provence, and Ollama.',
 }
 
 export default async function AppLayout({

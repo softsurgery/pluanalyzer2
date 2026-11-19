@@ -123,7 +123,7 @@ export interface StructuredRegulatoryRules {
   parkingPerDwelling: number | null
 }
 
-export interface OpenRouterInterpretationResult {
+export interface OllamaInterpretationResult {
   status: 'ok' | 'unconfigured' | 'insufficient_data' | 'error'
   model: string
   summary: string
@@ -146,6 +146,8 @@ export interface OpenRouterInterpretationResult {
   rawResponse?: unknown
   error?: string
 }
+
+export type RegulatoryInterpretationResult = OllamaInterpretationResult
 
 export interface ValidationIssue {
   severity: 'error' | 'warning' | 'info'

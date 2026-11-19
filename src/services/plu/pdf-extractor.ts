@@ -58,7 +58,25 @@ export async function extractPdfTextAndArticles(
   try {
     const pdfParseModule = await import('pdf-parse')
     const pdfParse = pdfParseModule.default || (pdfParseModule as unknown as (b: Buffer) => Promise<{ numpages: number; text: string }>)
-    const parsed = await pdfParse(buffer)
+
+    // Suppress noisy pdf.js TrueType font warnings (e.g. "Warning: TT: undefined function: 21")
+    const origWarn = console.warn
+    const origLog = console.log
+    const isTtWarning = (args: unknown[]) =>
+      typeof args[0] === 'string' && args[0].includes('Warning: TT:')
+    console.warn = (...args: unknown[]) => {
+      if (!isTtWarning(args)) origWarn.apply(console, args)
+    }
+    console.log = (...args: unknown[]) => {
+      if (!isTtWarning(args)) origLog.apply(console, args)
+    }
+    let parsed: { numpages: number; text: string }
+    try {
+      parsed = await pdfParse(buffer)
+    } finally {
+      console.warn = origWarn
+      console.log = origLog
+    }
     const rawText = (parsed.text || '').trim()
     const pageCount = parsed.numpages || 1
 

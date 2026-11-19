@@ -11,7 +11,7 @@ try {
 async function run() {
   const payload = await getPayload({ config })
   const res = await seedAiModels(payload)
-  console.log(`✅ Seeded AI models (${res.created} created, ${res.total} total free OpenRouter models).`)
+  console.log(`✅ Seeded AI models (${res.created} created, ${res.total} total Ollama models).`)
   process.exit(0)
 }
 

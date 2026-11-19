@@ -59,9 +59,9 @@ export const AIModels: CollectionConfig = {
       unique: true,
       label: "Model Identifier",
       admin: {
-        placeholder: "nvidia/nemotron-3-ultra-550b-a55b:free",
+        placeholder: "qwen3:0.6b",
         description:
-          "Exact OpenRouter model slug, e.g. nvidia/nemotron-3-ultra-550b-a55b:free",
+          "Exact Ollama model tag, e.g. qwen3:0.6b, qwen2.5:7b, or llama3.2:3b",
       },
     },
     {
@@ -69,7 +69,7 @@ export const AIModels: CollectionConfig = {
       type: "text",
       label: "Display Name",
       admin: {
-        placeholder: "NVIDIA Nemotron 3 Ultra 550B (Free)",
+        placeholder: "Qwen 3 0.6B (Local Ollama)",
         description: "Optional friendly name shown in the analysis selector.",
       },
     },
@@ -80,7 +80,7 @@ export const AIModels: CollectionConfig = {
       label: "System Default Model",
       admin: {
         description:
-          "Set as the default OpenRouter model for analyses when no model is explicitly chosen.",
+          "Set as the default Ollama model for analyses when no model is explicitly chosen.",
       },
     },
     {

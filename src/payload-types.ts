@@ -558,7 +558,7 @@ export interface PromptHistory {
 export interface AiModel {
   id: number;
   /**
-   * Exact OpenRouter model slug, e.g. nvidia/nemotron-3-ultra-550b-a55b:free
+   * Exact Ollama model tag, e.g. qwen3:0.6b, qwen2.5:7b, or llama3.2:3b
    */
   model: string;
   /**
@@ -566,7 +566,7 @@ export interface AiModel {
    */
   label?: string | null;
   /**
-   * Set as the default OpenRouter model for analyses when no model is explicitly chosen.
+   * Set as the default Ollama model for analyses when no model is explicitly chosen.
    */
   isDefault?: boolean | null;
   /**

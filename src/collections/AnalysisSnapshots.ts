@@ -123,7 +123,7 @@ export const AnalysisSnapshots: CollectionConfig = {
     {
       name: 'regulatoryInterpretation',
       type: 'json',
-      label: 'OpenRouter / Structured Regulatory Interpretation',
+      label: 'Ollama / Structured Regulatory Interpretation',
     },
     {
       name: 'validationStatus',

@@ -4,17 +4,14 @@ import React, { useState } from "react";
 import axios from "axios";
 import { Button, TextareaInput, useFormFields } from "@payloadcms/ui";
 import { cn } from "@/lib/utils";
-import type { TestAiResponse } from "@/types/openrouter";
+import type { TestAiResponse } from "@/types/ollama";
 
 export interface ModelTestProps {
   className?: string;
   onTestComplete?: () => void;
 }
 
-export const ModelTest: React.FC<ModelTestProps> = ({
-  className,
-  onTestComplete,
-}) => {
+export const ModelTest = ({ className, onTestComplete }: ModelTestProps) => {
   const selectedModelId = useFormFields(([fields]) => {
     const val = fields.defaultAiModel?.value;
     if (typeof val === "string" || typeof val === "number") return val;

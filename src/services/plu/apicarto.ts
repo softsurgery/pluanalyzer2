@@ -1,11 +1,16 @@
-import { fetchJsonWithTimeout } from '@/services/plu/http'
-import type { ApicartoResult, ApicartoZoningFeature, GeoJSONGeometry, GeoPoint } from '@/services/plu/types'
+import { fetchJsonWithTimeout } from "@/services/plu/http";
+import type {
+  ApicartoResult,
+  ApicartoZoningFeature,
+  GeoJSONGeometry,
+  GeoPoint,
+} from "@/services/plu/types";
 
 interface ApicartoCollectionResponse<T = Record<string, unknown>> {
   features?: Array<{
-    geometry?: unknown
-    properties?: T
-  }>
+    geometry?: unknown;
+    properties?: T;
+  }>;
 }
 
 /**
@@ -14,14 +19,18 @@ interface ApicartoCollectionResponse<T = Record<string, unknown>> {
 export async function fetchIgnApicartoGpu(
   geometryOrPoint: GeoJSONGeometry | GeoPoint,
 ): Promise<ApicartoResult> {
-  const baseUrl = process.env.IGN_APICARTO_BASE_URL || 'https://apicarto.ign.fr/api'
+  const baseUrl =
+    process.env.IGN_APICARTO_BASE_URL || "https://apicarto.ign.fr/api";
 
   const geomObj: GeoJSONGeometry =
-    'lng' in geometryOrPoint
-      ? { type: 'Point', coordinates: [geometryOrPoint.lng, geometryOrPoint.lat] }
-      : geometryOrPoint
+    "lng" in geometryOrPoint
+      ? {
+          type: "Point",
+          coordinates: [geometryOrPoint.lng, geometryOrPoint.lat],
+        }
+      : geometryOrPoint;
 
-  const geomParam = encodeURIComponent(JSON.stringify(geomObj))
+  const geomParam = encodeURIComponent(JSON.stringify(geomObj));
 
   const [zoneRes, surfRes, linRes, pctRes, infoRes] = await Promise.all([
     fetchJsonWithTimeout<ApicartoCollectionResponse<ApicartoZoningFeature>>(
@@ -39,25 +48,25 @@ export async function fetchIgnApicartoGpu(
     fetchJsonWithTimeout<ApicartoCollectionResponse>(
       `${baseUrl}/gpu/info-surf?geom=${geomParam}`,
     ),
-  ])
+  ]);
 
   if (!zoneRes.ok && !surfRes.ok && !linRes.ok && !pctRes.ok && !infoRes.ok) {
     return {
-      status: 'error',
+      status: "error",
       zones: [],
       prescriptions: { surf: [], lin: [], pct: [], infoSurf: [] },
-      error: zoneRes.error || 'IGN API Carto GPU unavailable',
-    }
+      error: zoneRes.error || "IGN API Carto GPU unavailable",
+    };
   }
 
   const zones = (zoneRes.data?.features || [])
     .map((f) => f.properties)
-    .filter((p): p is ApicartoZoningFeature => Boolean(p))
+    .filter((p): p is ApicartoZoningFeature => Boolean(p));
 
-  const primaryZone = zones[0]
+  const primaryZone = zones[0];
 
   return {
-    status: zones.length > 0 ? 'ok' : 'not_found',
+    status: zones.length > 0 ? "ok" : "not_found",
     zoneCode: primaryZone?.libelle,
     zoneLabel: primaryZone?.libelong,
     zoneType: primaryZone?.typezone,
@@ -76,5 +85,5 @@ export async function fetchIgnApicartoGpu(
       prescriptionPct: pctRes.data,
       infoSurf: infoRes.data,
     },
-  }
+  };
 }

@@ -3,7 +3,7 @@ import { parsePluArticles } from '@/services/plu/pdf-extractor'
 import { validateRegulatoryRules } from '@/services/plu/regulatory-validator'
 import { calculateConstructibility } from '@/services/plu/constructibility'
 import { buildArchicadExport } from '@/services/plu/archicad-export'
-import { interpretRegulationsWithOpenRouter } from '@/services/plu/openrouter-interpreter'
+import { interpretRegulationsWithOllama } from '@/services/plu/ollama-interpreter'
 import { compareAnalysisSnapshots } from '@/services/plu/pipeline'
 import type { StructuredRegulatoryRules } from '@/services/plu/types'
 
@@ -107,8 +107,8 @@ La hauteur maximale est de 15 mètres.
     expect(exported.envelopeConstraints.maxHeightM).toBe(15)
   })
 
-  it('never fabricates regulatory rules when articles are missing or OpenRouter key is unset', async () => {
-    const emptyRes = await interpretRegulationsWithOpenRouter({
+  it('never fabricates regulatory rules when articles are missing or Ollama is disabled', async () => {
+    const emptyRes = await interpretRegulationsWithOllama({
       prompt: 'Test',
       zoneCode: 'UA',
       articles: [],
@@ -116,15 +116,19 @@ La hauteur maximale est de 15 mètres.
     expect(emptyRes.status).toBe('insufficient_data')
     expect(emptyRes.rules.maxHeightM).toBeNull()
 
-    const prevKey = process.env.OPENROUTER_API_KEY
-    delete process.env.OPENROUTER_API_KEY
-    const unconfiguredRes = await interpretRegulationsWithOpenRouter({
+    const prevDisabled = process.env.OLLAMA_DISABLED
+    process.env.OLLAMA_DISABLED = 'true'
+    const unconfiguredRes = await interpretRegulationsWithOllama({
       prompt: 'Test',
       zoneCode: 'UA',
       articles: [{ articleNumber: 'Article 10', title: 'Hauteur', content: 'Hauteur max 12m' }],
     })
     expect(unconfiguredRes.status).toBe('unconfigured')
-    if (prevKey) process.env.OPENROUTER_API_KEY = prevKey
+    if (prevDisabled !== undefined) {
+      process.env.OLLAMA_DISABLED = prevDisabled
+    } else {
+      delete process.env.OLLAMA_DISABLED
+    }
   })
 
   it('compares two historical snapshots accurately', () => {

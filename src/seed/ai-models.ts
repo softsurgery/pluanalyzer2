@@ -8,55 +8,97 @@ export interface AiModelSeedEntry {
   description: string
 }
 
-export const FREE_OPENROUTER_MODELS: AiModelSeedEntry[] = [
+export const DEFAULT_OLLAMA_MODELS: AiModelSeedEntry[] = [
   {
-    model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-    label: 'NVIDIA Nemotron 3 Ultra 550B (Free)',
+    model: 'gpt-oss:20b',
+    label: 'GPT-OSS 20B (Ollama Cloud)',
     isDefault: true,
     isActive: true,
-    description: 'Default free OpenRouter reasoning model for PLU regulatory interpretation.',
+    description: 'Default fast Ollama Cloud reasoning model for PLU regulatory extraction.',
   },
   {
-    model: 'nvidia/nemotron-3.5-super-vl:free',
-    label: 'NVIDIA Nemotron 3.5 Super VL (Free)',
+    model: 'gpt-oss:120b',
+    label: 'GPT-OSS 120B (Ollama Cloud)',
     isDefault: false,
     isActive: true,
-    description: 'Fast NVIDIA free OpenRouter model (~1s response time).',
+    description: 'Large 120B Ollama Cloud reasoning model for complex PLU analysis.',
   },
   {
-    model: 'nvidia/nemotron-3.5-lightning:free',
-    label: 'NVIDIA Nemotron 3.5 Lightning (Free)',
+    model: 'gemma4:31b',
+    label: 'Google Gemma 4 31B (Ollama Cloud)',
     isDefault: false,
     isActive: true,
-    description: 'NVIDIA Lightning free OpenRouter model.',
+    description: 'Google Gemma 4 31B Ollama Cloud model with vision, tools, and structured output.',
   },
   {
-    model: 'google/gemma-4-26b-a4b-it:free',
-    label: 'Google Gemma 4 26B A4B (Free)',
+    model: 'mistral-large-4',
+    label: 'Mistral Large 4 (Ollama Cloud)',
     isDefault: false,
     isActive: true,
-    description: 'Google Gemma 4 26B MoE free OpenRouter model with structured JSON support.',
+    description: 'French-optimized Mistral Large 4 Ollama Cloud model for PLU/PLUi regulatory analysis.',
   },
   {
-    model: 'inclusionai/ling-3.2-flash:free',
-    label: 'inclusionAI Ling 3.2 Flash (Free)',
+    model: 'deepseek-v4.1-flash',
+    label: 'DeepSeek V4.1 Flash (Ollama Cloud)',
     isDefault: false,
     isActive: true,
-    description: 'Fast inclusionAI free OpenRouter model with structured JSON support.',
+    description: 'Fast DeepSeek V4.1 Flash Ollama Cloud model with thinking and vision support.',
   },
   {
-    model: 'baidu/ernie-5.5-flash-preview:free',
-    label: 'Baidu ERNIE 5.5 Flash Preview (Free)',
+    model: 'deepseek-v4-pro:0813',
+    label: 'DeepSeek V4 Pro (Ollama Cloud)',
     isDefault: false,
     isActive: true,
-    description: 'Fast Baidu ERNIE 5.5 Flash free OpenRouter model.',
+    description: 'DeepSeek V4 Pro Ollama Cloud reasoning model for complex multi-article PLU rule extraction.',
   },
   {
-    model: 'cohere/north-mini-code:free',
-    label: 'Cohere North Mini Code (Free)',
+    model: 'kimi-k3.1-pro',
+    label: 'Kimi K3.1 Pro (Ollama Cloud)',
     isDefault: false,
     isActive: true,
-    description: 'Ultra-fast Cohere free OpenRouter model (~0.6s response time).',
+    description: 'Kimi K3.1 Pro Ollama Cloud multimodal reasoning model.',
+  },
+  {
+    model: 'kimi-k3',
+    label: 'Kimi K3 (Ollama Cloud)',
+    isDefault: false,
+    isActive: true,
+    description: 'Kimi K3 Ollama Cloud multimodal reasoning model.',
+  },
+  {
+    model: 'minimax-m3.1-flash',
+    label: 'MiniMax M3.1 Flash (Ollama Cloud)',
+    isDefault: false,
+    isActive: true,
+    description: 'Fast MiniMax M3.1 Flash Ollama Cloud model.',
+  },
+  {
+    model: 'glm-5.3-flash',
+    label: 'GLM 5.3 Flash (Ollama Cloud)',
+    isDefault: false,
+    isActive: true,
+    description: 'Fast GLM 5.3 Flash Ollama Cloud model with thinking and vision.',
+  },
+  {
+    model: 'mimo-v2.6-flash',
+    label: 'MiMo V2.6 Flash (Ollama Cloud)',
+    isDefault: false,
+    isActive: true,
+    description: 'Fast MiMo V2.6 Flash Ollama Cloud model.',
+  },
+  {
+    model: 'nemotron-3-super',
+    label: 'NVIDIA Nemotron 3 Super (Ollama Cloud)',
+    isDefault: false,
+    isActive: true,
+    description: 'NVIDIA Nemotron 3 Super Ollama Cloud reasoning model.',
+  },
+  {
+    model: 'nemotron-3-ultra',
+    label: 'NVIDIA Nemotron 3 Ultra (Ollama Cloud)',
+    isDefault: false,
+    isActive: true,
+    description: 'NVIDIA Nemotron 3 Ultra Ollama Cloud reasoning model.',
   },
 ]
 
@@ -69,7 +111,7 @@ export async function seedAiModels(payload: Payload): Promise<{ created: number;
   const hasDefault = existingDefault.docs.length > 0
 
   let created = 0
-  for (const entry of FREE_OPENROUTER_MODELS) {
+  for (const entry of DEFAULT_OLLAMA_MODELS) {
     const existing = await payload.find({
       collection: 'ai-models',
       where: { model: { equals: entry.model } },
@@ -89,5 +131,5 @@ export async function seedAiModels(payload: Payload): Promise<{ created: number;
     }
   }
 
-  return { created, total: FREE_OPENROUTER_MODELS.length }
+  return { created, total: DEFAULT_OLLAMA_MODELS.length }
 }
