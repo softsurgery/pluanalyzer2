@@ -4,6 +4,7 @@ const config: Config = {
   darkMode: ['class'],
   content: [
     './src/app/(app)/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/(payload)/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/contexts/**/*.{js,ts,jsx,tsx,mdx}',
     './src/hooks/**/*.{js,ts,jsx,tsx,mdx}',
