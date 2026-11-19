@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { fetchJsonWithTimeout } from '@/services/plu/http'
 import { extractPdfTextAndArticles, parsePluArticles } from '@/services/plu/pdf-extractor'
 import type { ExtractedArticle, GPUDocumentInfo, GPUDocumentsResult } from '@/services/plu/types'
@@ -85,45 +86,89 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+const MAX_GPU_PDF_BYTES = 100 * 1024 * 1024
+
 export async function fetchGpuRegulationPdfText(params: {
   gpuDocId?: string
   nomfic?: string
   urlfic?: string
+  partition?: string
   zoneCode?: string
 }): Promise<{ url?: string; articles: ExtractedArticle[]; error?: string }> {
   const baseUrl =
     process.env.GPU_API_BASE_URL || 'https://www.geoportail-urbanisme.gouv.fr/api'
 
-  const pdfUrl =
+  const geopfDirectUrl =
+    params.partition && params.gpuDocId && params.nomfic
+      ? `https://data.geopf.fr/annexes/gpu/documents/${encodeURIComponent(params.partition)}/${encodeURIComponent(params.gpuDocId)}/${encodeURIComponent(params.nomfic)}`
+      : undefined
+  const gpuApiUrl =
+    params.gpuDocId && params.nomfic
+      ? `${baseUrl}/document/${encodeURIComponent(params.gpuDocId)}/files/${encodeURIComponent(params.nomfic)}`
+      : undefined
+  const externalUrl =
     params.urlfic && /^https?:\/\//i.test(params.urlfic)
-      ? params.urlfic
-      : params.gpuDocId && params.nomfic
-        ? `${baseUrl}/document/${encodeURIComponent(params.gpuDocId)}/files/${encodeURIComponent(params.nomfic)}`
-        : undefined
+      ? params.urlfic.split('#')[0]
+      : undefined
 
-  if (!pdfUrl) {
+  const candidateUrls = Array.from(
+    new Set(
+      [geopfDirectUrl, gpuApiUrl, externalUrl].filter((u): u is string =>
+        Boolean(u),
+      ),
+    ),
+  )
+
+  if (candidateUrls.length === 0) {
     return { articles: [], error: 'No GPU regulation PDF URL available' }
   }
 
-  try {
-    const response = await fetch(pdfUrl, {
-      signal: AbortSignal.timeout(25000),
-      headers: { Accept: 'application/pdf,*/*' },
-    })
-    if (!response.ok) {
-      return { url: pdfUrl, articles: [], error: `HTTP ${response.status} fetching GPU PDF` }
-    }
+  let pdfUrl = candidateUrls[0]
+  let pdfBuffer: Buffer | null = null
+  let lastError = 'Failed to fetch GPU regulation PDF'
 
-    const arrayBuffer = await response.arrayBuffer()
-    if (arrayBuffer.byteLength === 0 || arrayBuffer.byteLength > 30 * 1024 * 1024) {
-      return {
-        url: pdfUrl,
-        articles: [],
-        error: `GPU PDF size out of bounds (${arrayBuffer.byteLength} bytes)`,
+  for (const candidateUrl of candidateUrls) {
+    pdfUrl = candidateUrl
+    try {
+      console.log(`[GPU PDF] Fetching regulation PDF: ${candidateUrl}`)
+      const response = await axios.get<ArrayBuffer>(candidateUrl, {
+        responseType: 'arraybuffer',
+        timeout: 60000,
+        headers: { Accept: 'application/pdf,*/*' },
+        validateStatus: () => true,
+      })
+      if (response.status < 200 || response.status >= 300) {
+        lastError = `HTTP ${response.status} fetching GPU PDF`
+        console.warn(`[GPU PDF] ${candidateUrl} failed: ${lastError}`)
+        continue
       }
-    }
 
-    const extraction = await extractPdfTextAndArticles(Buffer.from(arrayBuffer))
+      const buf = Buffer.isBuffer(response.data)
+        ? response.data
+        : Buffer.from(response.data)
+      if (buf.byteLength === 0 || buf.byteLength > MAX_GPU_PDF_BYTES) {
+        lastError = `GPU PDF size out of bounds (${buf.byteLength} bytes)`
+        console.warn(`[GPU PDF] ${candidateUrl} skipped: ${lastError}`)
+        continue
+      }
+
+      console.log(
+        `[GPU PDF] Downloaded ${(buf.byteLength / (1024 * 1024)).toFixed(1)} MB from ${candidateUrl}`,
+      )
+      pdfBuffer = buf
+      break
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'Failed to fetch GPU regulation PDF'
+      console.warn(`[GPU PDF] ${candidateUrl} error: ${lastError}`)
+    }
+  }
+
+  if (!pdfBuffer) {
+    return { url: pdfUrl, articles: [], error: lastError }
+  }
+
+  try {
+    const extraction = await extractPdfTextAndArticles(pdfBuffer)
     if (extraction.articles.length === 0 && !extraction.text) {
       return { url: pdfUrl, articles: [], error: extraction.error || 'No text extracted from GPU PDF' }
     }

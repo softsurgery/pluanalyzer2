@@ -38,7 +38,7 @@ export function DashboardClient() {
     setIntro?.("Tableau de bord", "");
     setFloating?.(
       <Button asChild>
-        <Link href="/workspace?new=1">
+        <Link href="/workspace/new">
           <FolderPlus className="h-4 w-4" />
           Nouveau projet
         </Link>
@@ -222,7 +222,7 @@ export function DashboardClient() {
                     asChild
                     className="h-auto p-0 text-xs"
                   >
-                    <Link href={`/workspace?projectId=${p.id}`}>
+                    <Link href={`/workspace/${p.id}`}>
                       Ouvrir l&apos;espace PLU
                       <ArrowRight className="h-3.5 w-3.5" />
                     </Link>

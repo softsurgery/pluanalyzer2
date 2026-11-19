@@ -78,14 +78,27 @@ export async function runPluAnalysisPipeline(
     stepStart: number,
     message: string,
   ) => {
+    const durationMs = Date.now() - stepStart
+    const logLine = `[PLU Pipeline] [${executionCode}] [${status.toUpperCase()}] ${step} (${durationMs}ms): ${message}`
+    if (status === 'error') {
+      console.error(logLine)
+    } else if (status === 'warning') {
+      console.warn(logLine)
+    } else {
+      console.log(logLine)
+    }
     steps.push({
       step,
       status,
-      durationMs: Date.now() - stepStart,
+      durationMs,
       message,
       timestamp: new Date().toISOString(),
     })
   }
+
+  console.log(
+    `[PLU Pipeline] [${executionCode}] Starting analysis for projectId=${input.projectId} address="${input.address || ''}" idu="${input.idu || ''}" prompt="${input.prompt.slice(0, 80)}"`,
+  )
 
   // 1. Load Project
   const project = await payload.findByID({
@@ -369,6 +382,7 @@ export async function runPluAnalysisPipeline(
         gpuDocId: primaryZone.gpu_doc_id,
         nomfic: primaryZone.nomfic,
         urlfic: primaryZone.urlfic,
+        partition: primaryZone.partition,
         zoneCode: resolvedZoneCode,
       })
       if (gpuPdf.articles.length > 0) {
@@ -423,6 +437,10 @@ export async function runPluAnalysisPipeline(
       'nvidia/nemotron-3-ultra-550b-a55b:free'
     const fallbackModels = activeModelSlugs.filter((m) => m !== resolvedModel)
 
+    console.log(
+      `[PLU Pipeline] [${executionCode}] Invoking OpenRouter AI: model=${resolvedModel} fallbacks=${fallbackModels.length} articles=${extractedArticles.length} zone=${resolvedZoneCode || 'unknown'} surfaceM2=${parcelDoc?.surfaceM2 ?? 'null'}`,
+    )
+
     const interpretation = await interpretRegulationsWithOpenRouter({
       prompt: input.prompt,
       model: resolvedModel,
@@ -433,6 +451,15 @@ export async function runPluAnalysisPipeline(
       articles: extractedArticles,
       existingRules: baseRules,
     })
+    console.log(
+      `[PLU Pipeline] [${executionCode}] OpenRouter AI finished: status=${interpretation.status} model=${interpretation.model} citations=${interpretation.citations.length} warnings=${interpretation.warnings.length}`,
+    )
+    if (interpretation.warnings.length > 0) {
+      console.warn(
+        `[PLU Pipeline] [${executionCode}] OpenRouter AI warnings:`,
+        interpretation.warnings,
+      )
+    }
     logStep('openrouter_interpretation', interpretation.status === 'ok' ? 'ok' : 'warning', aiStart, interpretation.summary)
 
     // 9. Regulatory Validation
@@ -575,6 +602,10 @@ export async function runPluAnalysisPipeline(
     })
 
     const completedAt = new Date()
+    const totalDurationMs = completedAt.getTime() - startedAt.getTime()
+    console.log(
+      `[PLU Pipeline] [${executionCode}] Completed with status=${finalStatus} snapshotId=${snapshot.id} executionId=${execution.id} durationMs=${totalDurationMs}`,
+    )
     await payload.update({
       collection: 'executions',
       id: execution.id,
@@ -582,7 +613,7 @@ export async function runPluAnalysisPipeline(
         status: finalStatus,
         analysis: analysisDoc.id,
         completedAt: completedAt.toISOString(),
-        durationMs: completedAt.getTime() - startedAt.getTime(),
+        durationMs: totalDurationMs,
         steps: steps as unknown as Record<string, unknown>[],
         logs: steps as unknown as Record<string, unknown>[],
         errors: errors as unknown as Record<string, unknown>[],
@@ -598,6 +629,7 @@ export async function runPluAnalysisPipeline(
   } catch (err) {
     const completedAt = new Date()
     const message = err instanceof Error ? err.message : 'Unexpected pipeline failure'
+    console.error(`[PLU Pipeline] [${executionCode}] FAILED:`, message)
     errors.push({ step: 'pipeline', error: message })
 
     await payload.update({

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getPayloadWithUser } from "@/lib/payload-auth";
 import { resolveWorkspaceTabSettings } from "@/types/workspace";
 import { LoginPanel } from "@/components/auth/LoginPanel";
@@ -12,8 +13,15 @@ export default async function WorkspacePage({
 }) {
   const { payload, user } = await getPayloadWithUser();
   const resolvedParams = await searchParams;
-  const isNewProject =
-    resolvedParams.new === "1" || resolvedParams.new === "true";
+  if (resolvedParams.projectId) {
+    const tabQuery = resolvedParams.tab
+      ? `?tab=${encodeURIComponent(resolvedParams.tab)}`
+      : "";
+    redirect(`/workspace/${resolvedParams.projectId}${tabQuery}`);
+  }
+  if (resolvedParams.new === "1" || resolvedParams.new === "true") {
+    redirect("/workspace/new");
+  }
 
   if (!user) {
     return (
@@ -39,7 +47,6 @@ export default async function WorkspacePage({
     <WorkspaceClient
       initialProjectId={resolvedParams.projectId}
       initialTab={resolvedParams.tab}
-      initialIsNewProject={isNewProject}
       userRole={user.role}
       tabSettings={tabSettings}
     />

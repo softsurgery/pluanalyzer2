@@ -49,7 +49,7 @@ export function CreateProjectClient() {
         queryClient.invalidateQueries({ queryKey: projectKeys.all }),
         queryClient.invalidateQueries({ queryKey: projectKeys.stats }),
       ]);
-      router.push(created?.id ? `/workspace?projectId=${created.id}` : "/");
+      router.push(created?.id ? `/workspace/${created.id}` : "/");
     },
   });
 

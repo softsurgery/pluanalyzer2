@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type L from 'leaflet'
 import { Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface ParcelMapProps {
   centroid?: { lng?: number | null; lat?: number | null } | null
@@ -10,7 +11,16 @@ interface ParcelMapProps {
   parcelLabel?: string
   zoneCode?: string
   isLoading?: boolean
+  isExpanded?: boolean
+  onToggleExpand?: () => void
+  className?: string
 }
+
+const EXPAND_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg>'
+
+const COLLAPSE_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" x2="21" y1="10" y2="3"/><line x1="3" x2="10" y1="21" y2="14"/></svg>'
 
 export function ParcelMap({
   centroid,
@@ -18,12 +28,18 @@ export function ParcelMap({
   parcelLabel,
   zoneCode,
   isLoading = false,
+  isExpanded = false,
+  onToggleExpand,
+  className,
 }: ParcelMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const overlayRef = useRef<L.LayerGroup | null>(null)
   const boundsRef = useRef<L.LatLngBounds | null>(null)
   const centerRef = useRef<[number, number] | null>(null)
+  const expandBtnRef = useRef<HTMLAnchorElement | null>(null)
+  const onToggleExpandRef = useRef(onToggleExpand)
+  onToggleExpandRef.current = onToggleExpand
   const [mapReady, setMapReady] = useState(false)
 
   useEffect(() => {
@@ -107,6 +123,43 @@ export function ParcelMap({
       })
       new CenterControl().addTo(map)
 
+      if (onToggleExpandRef.current) {
+        const ExpandControl = leaflet.Control.extend({
+          options: { position: 'topleft' },
+          onAdd() {
+            const container = leaflet.DomUtil.create(
+              'div',
+              'leaflet-bar leaflet-control',
+            )
+            const button = leaflet.DomUtil.create('a', '', container)
+            button.href = '#'
+            button.title = isExpanded
+              ? 'Quitter le plein écran (Échap)'
+              : 'Agrandir la carte en plein écran'
+            button.setAttribute('role', 'button')
+            button.setAttribute(
+              'aria-label',
+              isExpanded
+                ? 'Quitter le plein écran'
+                : 'Agrandir la carte en plein écran',
+            )
+            button.style.display = 'flex'
+            button.style.alignItems = 'center'
+            button.style.justifyContent = 'center'
+            button.innerHTML = isExpanded ? COLLAPSE_SVG : EXPAND_SVG
+            expandBtnRef.current = button
+
+            leaflet.DomEvent.disableClickPropagation(container)
+            leaflet.DomEvent.on(button, 'click', (e) => {
+              leaflet.DomEvent.preventDefault(e)
+              onToggleExpandRef.current?.()
+            })
+            return container
+          },
+        })
+        new ExpandControl().addTo(map)
+      }
+
       const overlay = leaflet.layerGroup().addTo(map)
       mapRef.current = map
       overlayRef.current = overlay
@@ -144,9 +197,25 @@ export function ParcelMap({
         mapRef.current.remove()
         mapRef.current = null
         overlayRef.current = null
+        expandBtnRef.current = null
       }
     }
   }, [])
+
+  useEffect(() => {
+    const btn = expandBtnRef.current
+    if (!btn) return
+    btn.title = isExpanded
+      ? 'Quitter le plein écran (Échap)'
+      : 'Agrandir la carte en plein écran'
+    btn.setAttribute(
+      'aria-label',
+      isExpanded
+        ? 'Quitter le plein écran'
+        : 'Agrandir la carte en plein écran',
+    )
+    btn.innerHTML = isExpanded ? COLLAPSE_SVG : EXPAND_SVG
+  }, [isExpanded])
 
   useEffect(() => {
     let cancelled = false
@@ -211,7 +280,12 @@ export function ParcelMap({
   }, [mapReady, centroid?.lat, centroid?.lng, geometry, parcelLabel, zoneCode])
 
   return (
-    <div className="relative h-[460px] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+    <div
+      className={cn(
+        'relative z-0 isolate h-[460px] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 transition-all duration-300',
+        className,
+      )}
+    >
       <div ref={containerRef} className="h-full w-full" />
       {isLoading && (
         <div

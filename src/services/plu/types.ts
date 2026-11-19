@@ -129,6 +129,7 @@ export interface OpenRouterInterpretationResult {
   summary: string
   zoneCode?: string
   rules: StructuredRegulatoryRules
+  details?: Record<string, string>
   constructibility?: {
     zoneCode: string | null
     parcelSurfaceM2: number | null

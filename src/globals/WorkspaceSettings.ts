@@ -1,12 +1,12 @@
-import type { GlobalConfig } from 'payload'
-import { isAdmin, isAuthenticated } from '@/access/roles'
+import type { GlobalConfig } from "payload";
+import { isAdmin, isAuthenticated } from "@/access/roles";
 
 export const WorkspaceSettings: GlobalConfig = {
-  slug: 'workspace-settings',
-  label: 'Paramètres du Workspace',
+  slug: "workspace-settings",
+  label: "Paramètres du Workspace",
   admin: {
     description:
-      'Configurer la visibilité des onglets et le modèle IA global utilisé dans le workspace. L’onglet Inspecteur JSON reste toujours désactivé.',
+      "Configurer la visibilité des onglets et le modèle IA global utilisé dans le workspace. L’onglet Inspecteur JSON reste toujours désactivé.",
   },
   access: {
     read: isAuthenticated,
@@ -14,57 +14,66 @@ export const WorkspaceSettings: GlobalConfig = {
   },
   fields: [
     {
-      name: 'defaultAiModel',
-      type: 'relationship',
-      relationTo: 'ai-models',
-      label: 'Modèle IA global par défaut',
+      name: "defaultAiModel",
+      type: "relationship",
+      relationTo: "ai-models",
+      label: "Modèle IA global par défaut",
       admin: {
         description:
-          'Modèle IA utilisé globalement pour toutes les analyses PLU (si non défini, le modèle marqué par défaut dans AI Models est utilisé).',
+          "Modèle IA utilisé globalement pour toutes les analyses PLU (si non défini, le modèle marqué par défaut dans AI Models est utilisé).",
       },
     },
     {
-      name: 'tabs',
-      type: 'group',
-      label: 'Onglets du Workspace',
+      name: "model-details",
+      type: "ui",
+      admin: {
+        components: {
+          Field: "@/components/admin/model-details/ModelDetails#ModelDetails",
+        },
+      },
+    },
+    {
+      name: "tabs",
+      type: "group",
+      label: "Onglets du Workspace",
       fields: [
         {
-          name: 'showRegulations',
-          type: 'checkbox',
+          name: "showRegulations",
+          type: "checkbox",
           defaultValue: true,
-          label: 'Afficher l’onglet Réglementation',
+          label: "Afficher l’onglet Réglementation",
         },
         {
-          name: 'showCadastralInfo',
-          type: 'checkbox',
+          name: "showCadastralInfo",
+          type: "checkbox",
           defaultValue: true,
-          label: 'Afficher l’onglet Informations Cadastral',
+          label: "Afficher l’onglet Informations Cadastral",
         },
         {
-          name: 'showFeasibility',
-          type: 'checkbox',
+          name: "showFeasibility",
+          type: "checkbox",
           defaultValue: false,
-          label: 'Afficher l’onglet Faisabilité',
+          label: "Afficher l’onglet Faisabilité",
         },
         {
-          name: 'showHistory',
-          type: 'checkbox',
+          name: "showHistory",
+          type: "checkbox",
           defaultValue: true,
-          label: 'Afficher l’onglet Historique',
+          label: "Afficher l’onglet Historique",
         },
         {
-          name: 'showCompare',
-          type: 'checkbox',
+          name: "showCompare",
+          type: "checkbox",
           defaultValue: false,
-          label: 'Afficher l’onglet Comparaison',
+          label: "Afficher l’onglet Comparaison",
         },
         {
-          name: 'showSettings',
-          type: 'checkbox',
+          name: "showSettings",
+          type: "checkbox",
           defaultValue: true,
-          label: 'Afficher l’onglet Paramètres',
+          label: "Afficher l’onglet Paramètres",
         },
       ],
     },
   ],
-}
+};

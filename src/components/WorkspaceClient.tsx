@@ -60,12 +60,13 @@ type TabKey =
   | "json"
   | "settings";
 
-const SELECTABLE_TABS: readonly Exclude<TabKey, "json">[] = [
+const SELECTABLE_TABS: readonly TabKey[] = [
   "analysis",
   "constructibility",
   "regulations",
   "history",
   "compare",
+  "json",
   "settings",
 ];
 
@@ -87,7 +88,7 @@ function isTabEnabled(
     case "settings":
       return tabSettings.showSettings;
     case "json":
-      return false;
+      return true;
   }
 }
 
@@ -97,7 +98,7 @@ function resolveTabKey(
 ): TabKey {
   if (
     tab &&
-    SELECTABLE_TABS.includes(tab as Exclude<TabKey, "json">) &&
+    SELECTABLE_TABS.includes(tab as TabKey) &&
     isTabEnabled(tab as TabKey, tabSettings)
   ) {
     return tab as TabKey;
@@ -121,10 +122,10 @@ export function WorkspaceClient({
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
+  const [projectId, setProjectId] = useState<string>(initialProjectId || "");
   const [activeTab, setActiveTab] = useState<TabKey>(() =>
     resolveTabKey(initialTab, tabSettings),
   );
-  const [projectId, setProjectId] = useState<string>(initialProjectId || "");
   const [activeSnapshot, setActiveSnapshot] = useState<SnapshotRecord | null>(
     null,
   );
@@ -460,7 +461,7 @@ export function WorkspaceClient({
               Comparaison
             </TabsTrigger>
           )}
-          <TabsTrigger value="json" disabled>
+          <TabsTrigger value="json">
             <Code2 className="h-3.5 w-3.5" />
             Inspecteur JSON
           </TabsTrigger>

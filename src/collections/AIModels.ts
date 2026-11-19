@@ -1,11 +1,11 @@
-import type { CollectionConfig } from 'payload'
-import { isAdmin, isAuthenticated } from '@/access/roles'
+import type { CollectionConfig } from "payload";
+import { isAdmin, isAuthenticated } from "@/access/roles";
 
 export const AIModels: CollectionConfig = {
-  slug: 'ai-models',
+  slug: "ai-models",
   admin: {
-    useAsTitle: 'model',
-    defaultColumns: ['model', 'label', 'isDefault', 'isActive', 'updatedAt'],
+    useAsTitle: "model",
+    defaultColumns: ["model", "label", "isDefault", "isActive", "updatedAt"],
   },
   access: {
     read: isAuthenticated,
@@ -17,17 +17,17 @@ export const AIModels: CollectionConfig = {
     beforeChange: [
       ({ data }) => {
         if (data?.isDefault) {
-          data.isActive = true
+          data.isActive = true;
         }
-        return data
+        return data;
       },
     ],
     afterChange: [
       async ({ doc, req }) => {
-        if (!doc?.isDefault) return doc
+        if (!doc?.isDefault) return doc;
 
         const others = await req.payload.find({
-          collection: 'ai-models',
+          collection: "ai-models",
           where: {
             and: [
               { id: { not_equals: doc.id } },
@@ -36,66 +36,67 @@ export const AIModels: CollectionConfig = {
           },
           limit: 100,
           req,
-        })
+        });
 
         for (const other of others.docs) {
           await req.payload.update({
-            collection: 'ai-models',
+            collection: "ai-models",
             id: other.id,
             data: { isDefault: false },
             req,
-          })
+          });
         }
 
-        return doc
+        return doc;
       },
     ],
   },
   fields: [
     {
-      name: 'model',
-      type: 'text',
+      name: "model",
+      type: "text",
       required: true,
       unique: true,
-      label: 'Model Identifier (OpenRouter)',
+      label: "Model Identifier",
       admin: {
-        placeholder: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+        placeholder: "nvidia/nemotron-3-ultra-550b-a55b:free",
         description:
-          'Exact OpenRouter model slug, e.g. nvidia/nemotron-3-ultra-550b-a55b:free',
+          "Exact OpenRouter model slug, e.g. nvidia/nemotron-3-ultra-550b-a55b:free",
       },
     },
     {
-      name: 'label',
-      type: 'text',
-      label: 'Display Name',
+      name: "label",
+      type: "text",
+      label: "Display Name",
       admin: {
-        placeholder: 'NVIDIA Nemotron 3 Ultra 550B (Free)',
-        description: 'Optional friendly name shown in the analysis selector.',
+        placeholder: "NVIDIA Nemotron 3 Ultra 550B (Free)",
+        description: "Optional friendly name shown in the analysis selector.",
       },
     },
     {
-      name: 'isDefault',
-      type: 'checkbox',
+      name: "isDefault",
+      type: "checkbox",
       defaultValue: false,
-      label: 'System Default Model',
+      label: "System Default Model",
       admin: {
         description:
-          'Set as the default OpenRouter model for analyses when no model is explicitly chosen.',
+          "Set as the default OpenRouter model for analyses when no model is explicitly chosen.",
       },
     },
     {
-      name: 'isActive',
-      type: 'checkbox',
+      name: "isActive",
+      type: "checkbox",
       defaultValue: true,
-      label: 'Active',
+      label: "Active",
       admin: {
-        description: 'Only active models are selectable by users during analysis.',
+        description:
+          "Only active models are selectable by users during analysis.",
       },
     },
     {
-      name: 'description',
-      type: 'textarea',
-      label: 'Notes / Description',
+      name: "description",
+      type: "textarea",
+      label: "Notes / Description",
     },
   ],
-}
+};

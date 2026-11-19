@@ -14,6 +14,8 @@ export interface ParcelRecord {
 export interface ParcelLookupItem {
   status: string
   idu?: string
+  commune?: string
+  codeInsee?: string
   surfaceM2?: number
   centroid?: { lng?: number | null; lat?: number | null }
   geometry?: unknown
@@ -25,6 +27,9 @@ export interface ParcelLookupResponse {
   geocoding?: {
     coordinates?: { lng?: number | null; lat?: number | null }
     label?: string
+    city?: string
+    postcode?: string
+    citycode?: string
   }
   gpu?: { zoneCode?: string }
 }
