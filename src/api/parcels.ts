@@ -1,3 +1,4 @@
+import axios from 'axios'
 import type { PaginatedResponse } from '@/types/common'
 import type { ParcelLookupResponse, ParcelRecord } from '@/types/parcels'
 import { apiFetch } from '@/api/client'
@@ -26,13 +27,16 @@ export async function fetchAddressSuggestions(
   query: string,
   signal?: AbortSignal,
 ): Promise<AddressSuggestion[]> {
-  const res = await fetch(
-    `/api/plu/address-suggest?q=${encodeURIComponent(query)}`,
-    { signal },
+  const res = await axios.get<{ suggestions?: AddressSuggestion[] }>(
+    '/api/plu/address-suggest',
+    {
+      params: { q: query },
+      signal,
+      validateStatus: () => true,
+    },
   )
-  if (!res.ok) return []
-  const data = (await res.json()) as { suggestions?: AddressSuggestion[] }
-  return data.suggestions ?? []
+  if (res.status < 200 || res.status >= 300) return []
+  return res.data?.suggestions ?? []
 }
 
 export async function lookupParcel(input: {

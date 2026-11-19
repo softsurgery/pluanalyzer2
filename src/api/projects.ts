@@ -36,7 +36,7 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
 }
 
 export async function createProject(input: CreateProjectInput): Promise<ProjectItem> {
-  return apiFetch<ProjectItem>('/api/projects', {
+  const res = await apiFetch<ProjectItem | { doc: ProjectItem }>('/api/projects', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -44,6 +44,7 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectI
       status: input.status ?? 'active',
     }),
   })
+  return 'doc' in res ? res.doc : res
 }
 
 export async function updateProject(
