@@ -1,0 +1,93 @@
+"use client";
+
+import React, { useState } from "react";
+import ReactDOM from "react-dom";
+import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+
+interface UseDialogOptions {
+  children?: React.ReactNode | ((isOpen: boolean) => React.ReactNode);
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  className?: string;
+  onToggle?: () => void;
+}
+
+interface UseDialogReturn {
+  DialogFragment: React.ReactNode;
+  openDialog: () => void;
+  closeDialog: () => void;
+  isOpen: boolean;
+}
+
+export function useDialog({
+  children,
+  className = "",
+  title,
+  description,
+  onToggle,
+}: UseDialogOptions): UseDialogReturn {
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+
+  const openDialog = (): void => setIsOpen(true);
+  const closeDialog = (): void => setIsOpen(false);
+  const onOpenChange = (b: boolean) => {
+    setIsOpen(b);
+    onToggle?.();
+  };
+
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const resolvedChildren =
+    typeof children === "function" ? children(isOpen) : children;
+
+  const dialogContent = (
+    <React.Fragment>
+      {isDesktop ? (
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+          <DialogContent className={cn(className)}>
+            {title && description && (
+              <DialogHeader>
+                {title && <DialogTitle>{title}</DialogTitle>}
+                {description && (
+                  <DialogDescription>{description}</DialogDescription>
+                )}
+              </DialogHeader>
+            )}
+            {resolvedChildren}
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Drawer open={isOpen} onOpenChange={onOpenChange}>
+          <DrawerContent className="my-5 px-2">
+            <DrawerHeader>
+              <DrawerTitle>{title}</DrawerTitle>
+              <DrawerDescription>{description}</DrawerDescription>
+            </DrawerHeader>
+            {resolvedChildren}
+          </DrawerContent>
+        </Drawer>
+      )}
+    </React.Fragment>
+  );
+
+  const DialogFragment =
+    typeof document !== "undefined"
+      ? ReactDOM.createPortal(dialogContent, document.body)
+      : null;
+
+  return { DialogFragment, openDialog, closeDialog, isOpen };
+}
