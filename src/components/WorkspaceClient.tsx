@@ -127,7 +127,7 @@ function isTabEnabled(
     case "settings":
       return tabSettings.showSettings;
     case "json":
-      return true;
+      return tabSettings.showJsonInspector;
   }
 }
 
@@ -571,10 +571,12 @@ export function WorkspaceClient({
               Comparaison
             </TabsTrigger>
           )}
-          <TabsTrigger value="json">
-            <Code2 className="h-3.5 w-3.5" />
-            Inspecteur JSON
-          </TabsTrigger>
+          {tabSettings.showJsonInspector && (
+            <TabsTrigger value="json">
+              <Code2 className="h-3.5 w-3.5" />
+              Inspecteur JSON
+            </TabsTrigger>
+          )}
           {tabSettings.showSettings && (
             <TabsTrigger value="settings">
               <Settings className="h-3.5 w-3.5" />
@@ -658,9 +660,11 @@ export function WorkspaceClient({
           </TabsContent>
         )}
 
-        <TabsContent value="json">
-          <JsonInspectorTab activeSnapshot={activeSnapshot} />
-        </TabsContent>
+        {tabSettings.showJsonInspector && (
+          <TabsContent value="json">
+            <JsonInspectorTab activeSnapshot={activeSnapshot} />
+          </TabsContent>
+        )}
 
         {tabSettings.showSettings && (
           <TabsContent value="settings">

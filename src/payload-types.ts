@@ -1031,6 +1031,7 @@ export interface WorkspaceSetting {
     showFeasibility?: boolean | null;
     showHistory?: boolean | null;
     showCompare?: boolean | null;
+    showJsonInspector?: boolean | null;
     showSettings?: boolean | null;
   };
   updatedAt?: string | null;
@@ -1052,6 +1053,7 @@ export interface WorkspaceSettingsSelect<T extends boolean = true> {
         showFeasibility?: T;
         showHistory?: T;
         showCompare?: T;
+        showJsonInspector?: T;
         showSettings?: T;
       };
   updatedAt?: T;

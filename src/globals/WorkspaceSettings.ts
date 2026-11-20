@@ -92,6 +92,12 @@ export const WorkspaceSettings: GlobalConfig = {
           label: "Afficher l’onglet Comparaison",
         },
         {
+          name: "showJsonInspector",
+          type: "checkbox",
+          defaultValue: true,
+          label: "Afficher l’onglet Inspecteur JSON",
+        },
+        {
           name: "showSettings",
           type: "checkbox",
           defaultValue: true,

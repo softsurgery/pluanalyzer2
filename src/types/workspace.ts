@@ -4,6 +4,7 @@ export interface WorkspaceTabSettings {
   showFeasibility: boolean;
   showHistory: boolean;
   showCompare: boolean;
+  showJsonInspector: boolean;
   showSettings: boolean;
 }
 
@@ -13,6 +14,7 @@ export const DEFAULT_WORKSPACE_TAB_SETTINGS: WorkspaceTabSettings = {
   showFeasibility: false,
   showHistory: true,
   showCompare: false,
+  showJsonInspector: true,
   showSettings: true,
 };
 
@@ -29,6 +31,9 @@ export function resolveWorkspaceTabSettings(
       tabs?.showFeasibility ?? DEFAULT_WORKSPACE_TAB_SETTINGS.showFeasibility,
     showHistory: tabs?.showHistory ?? DEFAULT_WORKSPACE_TAB_SETTINGS.showHistory,
     showCompare: tabs?.showCompare ?? DEFAULT_WORKSPACE_TAB_SETTINGS.showCompare,
+    showJsonInspector:
+      tabs?.showJsonInspector ??
+      DEFAULT_WORKSPACE_TAB_SETTINGS.showJsonInspector,
     showSettings:
       tabs?.showSettings ?? DEFAULT_WORKSPACE_TAB_SETTINGS.showSettings,
   };
