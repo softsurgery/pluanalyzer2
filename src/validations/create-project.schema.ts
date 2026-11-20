@@ -8,5 +8,4 @@ export const createProjectSchema = z.object({
     .trim()
     .regex(/^\d{5}$/, "Le code INSEE doit contenir 5 chiffres."),
   territory: z.enum(["amp", "gpu"]),
-  description: z.string(),
 });

@@ -50,10 +50,6 @@ export const Projects: CollectionConfig = {
       required: true,
     },
     {
-      name: 'description',
-      type: 'textarea',
-    },
-    {
       name: 'territory',
       type: 'select',
       defaultValue: 'amp',

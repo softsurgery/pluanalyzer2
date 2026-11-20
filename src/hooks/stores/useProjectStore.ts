@@ -6,12 +6,10 @@ export interface CreateProjectDto {
   commune: string;
   codeInsee: string;
   territory: "amp" | "gpu";
-  description: string;
 }
 
 export interface UpdateProjectDto {
   name: string;
-  description: string;
 }
 
 interface ProjectStoreData {
@@ -33,12 +31,10 @@ const initialState: ProjectStoreData = {
     commune: "Aix-en-Provence",
     codeInsee: "13001",
     territory: "amp",
-    description: "",
   },
   createDtoErrors: {},
   updateDto: {
     name: "",
-    description: "",
   },
   updateDtoErrors: {},
 };

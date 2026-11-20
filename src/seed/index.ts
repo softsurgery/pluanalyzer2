@@ -111,8 +111,6 @@ export async function seedDatabase(payload: Payload) {
       collection: 'projects',
       data: {
         name: 'Étude Sextius-Mirabeau — Résidence Mixte',
-        description:
-          'Étude de faisabilité urbaine et calcul de constructibilité sur parcelle centrale à Aix-en-Provence (Métropole AMP).',
         territory: 'amp',
         commune: 'Aix-en-Provence',
         codeInsee: '13001',

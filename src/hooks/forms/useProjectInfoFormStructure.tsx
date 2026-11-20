@@ -3,56 +3,20 @@ import {
   Field,
   FieldVariant,
   FormStructure,
-  TextareaFieldProps,
   TextFieldProps,
 } from "@/components/shared/form-builder";
-import { ProjectStore } from "@/hooks/stores/useProjectStore";
 
 interface ProjectInfoFormStructureProps {
-  projectStore: ProjectStore;
   commune: string;
   codeInsee: string;
   territoryLabel: string;
 }
 
 export const useProjectInfoFormStructure = ({
-  projectStore,
   commune,
   codeInsee,
   territoryLabel,
 }: ProjectInfoFormStructureProps) => {
-  const nameField: Field<TextFieldProps> = {
-    id: "project-title",
-    label: "Titre du projet",
-    variant: FieldVariant.TEXT,
-    required: true,
-    placeholder: "Nom du projet",
-    description: "Intitulé de l'étude de faisabilité.",
-    error: projectStore.updateDtoErrors?.name?.[0],
-    props: {
-      value: projectStore.updateDto.name,
-      onChange: (value) => {
-        projectStore.setNested("updateDto.name", value);
-        projectStore.setNested("updateDtoErrors.name", []);
-      },
-    },
-  };
-
-  const descriptionField: Field<TextareaFieldProps> = {
-    id: "project-description",
-    label: "Description",
-    variant: FieldVariant.TEXTAREA,
-    placeholder: "Description du projet (optionnelle)",
-    description: "Notes complémentaires sur le programme ou le site.",
-    error: projectStore.updateDtoErrors?.description?.[0],
-    props: {
-      value: projectStore.updateDto.description,
-      onChange: (value) => {
-        projectStore.setNested("updateDto.description", value);
-        projectStore.setNested("updateDtoErrors.description", []);
-      },
-    },
-  };
 
   const communeField: Field<TextFieldProps> = {
     id: "project-commune",
@@ -103,8 +67,6 @@ export const useProjectInfoFormStructure = ({
       {
         gap: 16,
         rows: [
-          { fields: [nameField] },
-          { fields: [descriptionField] },
           { fields: [communeField, codeInseeField, territoryField] },
           { fields: [locationHintField] },
         ],

@@ -85,22 +85,6 @@ export const useCreateProjectFormStructure = ({
     },
   };
 
-  const descriptionField: Field<TextFieldProps> = {
-    id: "proj-desc",
-    label: "Description",
-    variant: FieldVariant.TEXT,
-    placeholder: "Contexte urbain, programme envisagé...",
-    description: "Notes complémentaires sur le programme ou le site.",
-    error: projectStore.createDtoErrors?.description?.[0],
-    props: {
-      value: projectStore.createDto.description,
-      onChange: (value) => {
-        projectStore.setNested("createDto.description", value);
-        projectStore.setNested("createDtoErrors.description", []);
-      },
-    },
-  };
-
   const createProjectFormStructure: FormStructure = {
     title: "",
     description: "",
@@ -109,7 +93,7 @@ export const useCreateProjectFormStructure = ({
         gap: 16,
         rows: [
           { fields: [nameField, communeField, codeInseeField] },
-          { fields: [territoryField, descriptionField] },
+          { fields: [territoryField] },
         ],
       },
     ],

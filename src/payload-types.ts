@@ -182,7 +182,6 @@ export interface User {
 export interface Project {
   id: number;
   name: string;
-  description?: string | null;
   territory?: ('amp' | 'gpu') | null;
   commune: string;
   codeInsee: string;
@@ -743,7 +742,6 @@ export interface UsersSelect<T extends boolean = true> {
  */
 export interface ProjectsSelect<T extends boolean = true> {
   name?: T;
-  description?: T;
   territory?: T;
   commune?: T;
   codeInsee?: T;

@@ -204,14 +204,6 @@ export function DashboardClient() {
                   </CardDescription>
                 </CardHeader>
 
-                {p.description && (
-                  <CardContent className="pt-0">
-                    <p className="line-clamp-2 text-xs text-muted-foreground">
-                      {p.description}
-                    </p>
-                  </CardContent>
-                )}
-
                 <CardFooter className="mt-auto justify-between border-t pt-3">
                   <span className="text-[11px] text-muted-foreground">
                     Maj {new Date(p.updatedAt).toLocaleDateString("fr-FR")}
