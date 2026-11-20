@@ -34,11 +34,15 @@ export default function DataTableCell({
     return <div className={className}>{value}</div>;
   } else if (variant === DataTableCellVariant.DATE_TIME) {
     if (!value) return <div className={className}>Aucune date</div>;
+    const date = value instanceof Date ? value : new Date(value);
+    if (isNaN(date.getTime())) {
+      return <div className={className}>{String(value)}</div>;
+    }
     return (
-      <div className="flex items-start flex-col">
-        <div>{value?.toLocaleDateString()}</div>
+      <div className={cn("flex items-start flex-col", className)}>
+        <div>{date.toLocaleDateString()}</div>
         <div className="text-muted-foreground">
-          {value?.toLocaleTimeString()}
+          {date.toLocaleTimeString()}
         </div>
       </div>
     );

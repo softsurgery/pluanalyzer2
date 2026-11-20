@@ -2,14 +2,42 @@ import type { PaginatedResponse } from '@/types/common'
 import type { DocumentItem, UploadDocumentInput } from '@/types/documents'
 import { apiFetch } from '@/api/client'
 
-export const documentKeys = {
-  all: ['documents'] as const,
-  list: (limit = 50) => ['documents', limit] as const,
+export interface FetchDocumentsParams {
+  page?: number
+  limit?: number
+  sort?: string
+  search?: string
 }
 
-export async function fetchDocuments(limit = 50): Promise<PaginatedResponse<DocumentItem>> {
+export const documentKeys = {
+  all: ['documents'] as const,
+  list: (params: FetchDocumentsParams | number = 50) =>
+    ['documents', typeof params === 'number' ? { limit: params } : params] as const,
+}
+
+export async function fetchDocuments(
+  params: FetchDocumentsParams | number = 50,
+): Promise<PaginatedResponse<DocumentItem>> {
+  const normalized: FetchDocumentsParams =
+    typeof params === 'number' ? { limit: params } : params
+
+  const searchParams = new URLSearchParams({
+    depth: '1',
+    page: String(normalized.page ?? 1),
+    limit: String(normalized.limit ?? 50),
+    sort: normalized.sort || '-updatedAt',
+  })
+
+  const search = normalized.search?.trim()
+  if (search) {
+    searchParams.set('where[or][0][title][like]', search)
+    searchParams.set('where[or][1][commune][like]', search)
+    searchParams.set('where[or][2][codeInsee][like]', search)
+    searchParams.set('where[or][3][zoneCode][like]', search)
+  }
+
   return apiFetch<PaginatedResponse<DocumentItem>>(
-    `/api/documents?sort=-updatedAt&limit=${limit}&depth=1`,
+    `/api/documents?${searchParams.toString()}`,
   )
 }
 
