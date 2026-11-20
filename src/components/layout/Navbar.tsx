@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, FolderKanban, MapPin } from "lucide-react";
+import { FileText, FolderKanban } from "lucide-react";
 import type { AuthUser } from "@/access/roles";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -20,7 +20,6 @@ export function Navbar({ className, user }: NavbarProps) {
 
   const navItems = [
     { href: "/", label: "Projets", icon: FolderKanban },
-    { href: "/workspace", label: "Analyse PLU & Carte", icon: MapPin },
     { href: "/documents", label: "Documents PLU", icon: FileText },
   ];
 
