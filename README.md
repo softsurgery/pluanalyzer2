@@ -10,6 +10,7 @@ PLU Analyzer is a full-stack web application built with **Next.js**, **Payload C
 
 - [What Does This App Actually Do?](#what-does-this-app-actually-do)
 - [How the Analysis Pipeline Works](#how-the-analysis-pipeline-works)
+- [Ollama Service & AI Pipeline Architecture](docs/OLLAMA_AND_AI_PIPELINES.md)
 - [Tech Stack (What's Inside)](#tech-stack-whats-inside)
 - [Prerequisites](#prerequisites)
 - [Quick Start Guide (Step-by-Step)](#quick-start-guide-step-by-step)
@@ -38,7 +39,7 @@ Normally, an architect or urbanist has to manually:
 3. Download a 100+ page PDF rulebook from the _Géoportail de l'Urbanisme_.
 4. Read the PDF and do math in a spreadsheet.
 
-**PLU Analyzer automates this workflow in one place.** You give it an address or a parcel ID, and it fetches the map data, finds the zoning, reads/extracts the rules, optionally uses AI (Groq) to interpret complex French legal text, calculates buildable area (**constructibility**), and generates an **ArchiCAD-ready export**.
+**PLU Analyzer automates this workflow in one place.** You give it an address or a parcel ID, and it fetches the map data, finds the zoning, reads/extracts the rules, uses a local or remote **Ollama** LLM pipeline to interpret complex French legal text, calculates buildable area (**constructibility**), and generates an **ArchiCAD-ready export**.
 
 ---
 
@@ -52,12 +53,12 @@ When you run an analysis in the workspace (`POST /api/plu/analyze`), the backend
 3. Zoning Lookup      ──▶ Checks which PLU zone the parcel belongs to (IGN GPU + AMP ArcGIS)
 4. GPU Documents      ──▶ Finds official PLU PDFs/documents for that commune
 5. PDF Extraction     ──▶ Extracts PLU articles from PDFs (with optional OCR via Tesseract)
-6. AI Interpretation  ──▶ Uses Groq LLM (optional) to turn legal text into structured numbers
+6. AI Interpretation  ──▶ Uses OllamaService + AiPipeline to turn legal text into structured numbers
 7. Validation         ──▶ Checks rule completeness and flags missing/invalid constraints
 8. Constructibility   ──▶ Calculates max footprint, floor area, green space, and ArchiCAD export
 ```
 
-Every run is saved with an execution log, a **Snapshot** (so you can replay or compare analyses later), and **Prompt History**.
+Every run is saved with an execution log, a **Snapshot** (so you can replay or compare analyses later), and **Prompt History**. For full details on the `OllamaService` utility class and the composable `AiPipeline` builder layer, see **[`docs/OLLAMA_AND_AI_PIPELINES.md`](docs/OLLAMA_AND_AI_PIPELINES.md)**.
 
 ---
 
@@ -74,7 +75,7 @@ If you're new to these tools, here is what each one does:
 | **Tailwind CSS + shadcn/ui** | Styles the interface with clean, modern UI components and dark/light mode.                                   |
 | **Leaflet**                  | Displays interactive maps showing the land parcel's polygon shape.                                           |
 | **TanStack React Query**     | Keeps frontend data in sync with the backend API cleanly.                                                    |
-| **Groq API**                 | Optional fast AI model (`llama-3.3-70b-versatile`) that reads French PLU text and extracts structured rules. |
+| **Ollama API**               | Local/self-hosted AI service (`qwen3:0.6b`, `qwen2.5:7b`, etc.) that reads French PLU text and extracts structured rules. |
 | **Vitest**                   | Runs automated unit and integration tests.                                                                   |
 
 ---
@@ -105,7 +106,7 @@ Copy the example environment file to `.env`:
 cp .env.example .env
 ```
 
-Open `.env` and set a secret key for `PAYLOAD_SECRET` (any random 32+ character string). Everything else works out of the box for local development! _(If you have a Groq API key for AI rule interpretation, you can paste it into `GROQ_API_KEY`.)_
+Open `.env` and set a secret key for `PAYLOAD_SECRET` (any random 32+ character string). Everything else works out of the box for local development with a local Ollama server at `http://localhost:11434`.
 
 ### 3. Start the PostgreSQL database
 
@@ -196,9 +197,11 @@ Here is what each setting in `.env.example` does:
 | `GPU_API_BASE_URL`        | `https://www.geoportail-urbanisme.gouv.fr/api`                   | Official _Géoportail de l'Urbanisme_ API for PLU documents.                           |
 | `AMP_ARCGIS_PLUI_URL`     | `https://sig.ampmetropole.fr/arcgis/rest/services`               | Aix-Marseille-Provence Metropolis ArcGIS server for local PLUi zoning.                |
 | `AMP_ARCGIS_ZONING_LAYER` | `PLUi/MapServer/0`                                               | Specific map layer on the AMP ArcGIS server.                                          |
-| `GROQ_API_KEY`            | _(empty)_                                                        | Optional API key for Groq AI. Without it, AI interpretation is skipped/fallback.      |
-| `GROQ_MODEL`              | `llama-3.3-70b-versatile`                                        | Which Groq LLM model to use for reading PLU rules.                                    |
-| `GROQ_API_URL`            | `https://api.groq.com/openai/v1/chat/completions`                | Groq API endpoint.                                                                    |
+| `OLLAMA_BASE_URL`         | `http://localhost:11434`                                         | Base URL of the local or remote Ollama REST API server.                               |
+| `OLLAMA_MODEL`            | `qwen3:0.6b`                                                     | Default Ollama model tag used for PLU regulatory extraction.                          |
+| `OLLAMA_API_KEY`          | _(empty)_                                                        | Optional Bearer token when Ollama is hosted behind an authenticated proxy.            |
+| `OLLAMA_TIMEOUT_MS`       | `60000`                                                          | Default request timeout in milliseconds for Ollama calls.                             |
+| `OLLAMA_KEEP_ALIVE`       | `5m`                                                             | Duration to keep Ollama models loaded in VRAM/RAM after inference.                    |
 | `OCR_ENABLED`             | `false`                                                          | Set to `true` if you want to run OCR on scanned PDFs that don't have selectable text. |
 | `OCR_COMMAND`             | `tesseract`                                                      | CLI command used for OCR when `OCR_ENABLED=true`.                                     |
 
@@ -216,18 +219,21 @@ pluanalyzer2/
 │   ├── access/               # Role-based permissions (admin, urban_planner, viewer)
 │   ├── migrations/           # Database schema migrations
 │   ├── seed/                 # Script to populate demo users, parcel, and project
-│   ├── services/plu/         # Core business logic:
-│   │   ├── pipeline.ts       #   Orchestrates the 8-step analysis workflow
-│   │   ├── geocoding.ts      #   Address -> lat/lng
-│   │   ├── cadastre.ts       #   IGN parcel lookup
-│   │   ├── apicarto.ts       #   IGN GPU zoning lookup
-│   │   ├── metropole-arcgis.ts # Aix-Marseille-Provence zoning lookup
-│   │   ├── gpu-documents.ts  #   Fetches official PLU PDFs
-│   │   ├── pdf-extractor.ts  #   Parses articles from PDFs
-│   │   ├── groq-interpreter.ts # AI interpretation of PLU rules
-│   │   ├── regulatory-validator.ts # Validates rule completeness
-│   │   ├── constructibility.ts # Calculates buildable area & setbacks
-│   │   └── archicad-export.ts # Formats results for ArchiCAD
+│   ├── services/
+│   │   ├── ollama/           # Layer 1: OllamaService class & REST API utilities
+│   │   ├── ai-pipeline/      # Layer 2: Composable AiPipeline, PromptBuilder & presets
+│   │   └── plu/              # Core PLU business logic:
+│   │       ├── pipeline.ts   #   Orchestrates the 8-step analysis workflow
+│   │       ├── geocoding.ts  #   Address -> lat/lng
+│   │       ├── cadastre.ts   #   IGN parcel lookup
+│   │       ├── apicarto.ts   #   IGN GPU zoning lookup
+│   │       ├── metropole-arcgis.ts # Aix-Marseille-Provence zoning lookup
+│   │       ├── gpu-documents.ts # Fetches official PLU PDFs
+│   │       ├── pdf-extractor.ts # Parses articles from PDFs
+│   │       ├── ollama-interpreter.ts # AI interpretation of PLU rules via AiPipeline + OllamaService
+│   │       ├── regulatory-validator.ts # Validates rule completeness
+│   │       ├── constructibility.ts # Calculates buildable area & setbacks
+│   │       └── archicad-export.ts # Formats results for ArchiCAD
 │   ├── app/
 │   │   ├── (app)/            # Frontend pages (/, /workspace, /documents)
 │   │   ├── (payload)/        # Payload CMS /admin panel & REST/GraphQL APIs
@@ -263,6 +269,6 @@ pluanalyzer2/
 - **Tables don't exist / `relation "users" does not exist`**
   You probably skipped `pnpm migrate`. Run `pnpm migrate` and then `pnpm seed`.
 - **AI interpretation step shows a warning or skips**
-  This is normal if `GROQ_API_KEY` is blank in `.env`. The rest of the pipeline (geocoding, cadastre, zoning, validation, constructibility) still works without it.
+  Make sure your Ollama server is running (`ollama serve`) and the configured model is pulled (`ollama pull qwen3:0.6b`). The rest of the pipeline (geocoding, cadastre, zoning, validation, constructibility) still works even if Ollama is offline.
 - **External French API timeouts (IGN / GPU / ArcGIS)**
   The app queries live French government GIS services (`data.geopf.fr`, `apicarto.ign.fr`, `geoportail-urbanisme.gouv.fr`). If one of those public APIs is temporarily slow or offline, the pipeline logs a warning for that step and continues with available data.
