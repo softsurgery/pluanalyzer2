@@ -56,7 +56,7 @@ export default buildConfig({
           prefix: "media",
         },
       },
-      bucket: process.env.S3_BUCKET || "plu",
+      bucket: process.env.S3_BUCKET || "plu-analyzer",
       config: {
         endpoint: process.env.S3_ENDPOINT || "http://localhost:9090",
         region: process.env.S3_REGION || "us-east-1",
@@ -76,9 +76,7 @@ export default buildConfig({
   },
   db: postgresAdapter({
     pool: {
-      connectionString:
-        process.env.DATABASE_URI ||
-        "postgresql://plu_user:plu_password@localhost:5433/plu_analyzer",
+      connectionString: process.env.DATABASE_URI,
     },
     migrationDir: path.resolve(dirname, "migrations"),
   }),

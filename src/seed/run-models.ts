@@ -1,7 +1,3 @@
-import { getPayload } from 'payload'
-import config from '@payload-config'
-import { seedAiModels } from '@/seed/ai-models'
-
 try {
   process.loadEnvFile?.('.env')
 } catch {
@@ -9,6 +5,9 @@ try {
 }
 
 async function run() {
+  const { getPayload } = await import('payload')
+  const { default: config } = await import('@payload-config')
+  const { seedAiModels } = await import('@/seed/ai-models')
   const payload = await getPayload({ config })
   const res = await seedAiModels(payload)
   console.log(`✅ Seeded AI models (${res.created} created, ${res.total} total Ollama models).`)
