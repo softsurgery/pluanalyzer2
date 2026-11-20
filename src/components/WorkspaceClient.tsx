@@ -172,7 +172,7 @@ export function WorkspaceClient({
 
   // Form state (Zustand)
   const analysisStore = useAnalysisStore();
-  const { locationMode, address, idu, cadastreNumbers, prompt } =
+  const { locationMode, address, idu, cadastreNumbers } =
     analysisStore.createDto;
 
   useEffect(() => {
@@ -447,7 +447,6 @@ export function WorkspaceClient({
     mutationFn: () => {
       const base = {
         projectId: Number(projectId),
-        prompt,
       };
       if (locationMode === "parcel") {
         return runAnalysis({

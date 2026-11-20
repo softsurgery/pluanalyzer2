@@ -36,8 +36,7 @@ const initialState: AnalysisStoreData = {
     selectedParcelId: "",
     pickedLocation: null,
     aiModel: "",
-    prompt:
-      "Analyser la constructibilité maximale (emprise, hauteur, SDP, stationnement) pour un bâtiment mixte R+3.",
+    prompt: "",
   },
   createDtoErrors: {},
 };

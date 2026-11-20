@@ -8,7 +8,7 @@ import {
   fetchGpuRegulationPdfText,
   selectArticlesForZone,
 } from "@/services/plu/gpu-documents";
-import { parsePluArticles } from "@/services/plu/pdf-extractor";
+import { PdfExtractor } from "@/services/pdf";
 import { interpretRegulationsWithOllama } from "@/services/plu/ollama-interpreter";
 import { validateRegulatoryRules } from "@/services/plu/regulatory-validator";
 import { calculateConstructibility } from "@/services/plu/constructibility";
@@ -22,10 +22,13 @@ import type {
 } from "@/services/plu/types";
 import { DEFAULT_OLLAMA_MODEL } from "@/services/ollama/OllamaService";
 
+export const DEFAULT_PLU_EXTRACTION_PROMPT =
+  "Extraire l'ensemble des règles d'urbanisme applicables à la parcelle (implantation, reculs, hauteur, emprise au sol, espaces verts, pleine terre, stationnement, aspect extérieur, réseaux, servitudes, risques et OAP) à partir du règlement officiel.";
+
 export interface RunAnalysisInput {
   projectId: number | string;
   analysisId?: number | string;
-  prompt: string;
+  prompt?: string;
   aiModel?: string;
   address?: string;
   parcelId?: number | string;
@@ -76,6 +79,7 @@ export async function runPluAnalysisPipeline(
   userId: number | string,
 ) {
   const startedAt = new Date();
+  const effectivePrompt = input.prompt?.trim() || DEFAULT_PLU_EXTRACTION_PROMPT;
   const executionCode = `EXEC-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
   const steps: PipelineStepLog[] = [];
   const errors: Array<{ step: string; error: string }> = [];
@@ -106,7 +110,7 @@ export async function runPluAnalysisPipeline(
   };
 
   console.log(
-    `[PLU Pipeline] [${executionCode}] Starting analysis for projectId=${input.projectId} address="${input.address || ""}" idu="${input.idu || ""}" prompt="${input.prompt.slice(0, 80)}"`,
+    `[PLU Pipeline] [${executionCode}] Starting analysis for projectId=${input.projectId} address="${input.address || ""}" idu="${input.idu || ""}" prompt="${effectivePrompt.slice(0, 80)}"`,
   );
 
   // 1. Load Project
@@ -492,11 +496,27 @@ export async function runPluAnalysisPipeline(
     }
     for (const doc of matchingDocs.docs) {
       if (doc.extractedText && doc.extractedText.trim().length > 0) {
-        const parsed = parsePluArticles(doc.extractedText);
+        const cleanedText = PdfExtractor.cleanAndCondenseText(
+          doc.extractedText,
+        );
+        const parsed = PdfExtractor.parseArticles(cleanedText);
+
+        if (cleanedText !== doc.extractedText) {
+          await payload
+            .update({
+              collection: "documents",
+              id: doc.id,
+              data: {
+                extractedText: cleanedText,
+              },
+            })
+            .catch(() => {});
+        }
+
         extractedArticles.push(
-          ...selectArticlesForZone(doc.extractedText, parsed, resolvedZoneCode, {
+          ...selectArticlesForZone(cleanedText, parsed, resolvedZoneCode, {
             maxArticles: maxPdfArticlesToAi,
-            prompt: input.prompt,
+            prompt: effectivePrompt,
           }),
         );
       }
@@ -514,8 +534,9 @@ export async function runPluAnalysisPipeline(
       d.files?.some((f) => /\.pdf$/i.test(f.name)),
     );
     const fallbackPdfFile =
-      fallbackGpuDoc?.files?.find((f) => /reglement/i.test(f.name) && /\.pdf$/i.test(f.name)) ||
-      fallbackGpuDoc?.files?.find((f) => /\.pdf$/i.test(f.name));
+      fallbackGpuDoc?.files?.find(
+        (f) => /reglement/i.test(f.name) && /\.pdf$/i.test(f.name),
+      ) || fallbackGpuDoc?.files?.find((f) => /\.pdf$/i.test(f.name));
 
     const targetGpuDocId = primaryZone?.gpu_doc_id || fallbackGpuDoc?.id;
     const targetNomfic = primaryZone?.nomfic || fallbackPdfFile?.name;
@@ -557,11 +578,14 @@ export async function runPluAnalysisPipeline(
             extractedArticles.push(art);
           }
         }
+        const mapSummary = gpuPdf.contentMap
+          ? ` [mapped: ${gpuPdf.contentMap.metadata.pageCount} pages, ${gpuPdf.contentMap.sections.length} sections, ${gpuPdf.contentMap.articles.length} articles, ${gpuPdf.contentMap.topics.length} topics]`
+          : "";
         logStep(
           "gpu_pdf_extraction",
           "ok",
           pdfStart,
-          `Extracted ${gpuPdf.articles.length} article(s) from official GPU PDF (${targetNomfic || gpuPdf.url})`,
+          `Extracted ${gpuPdf.articles.length} article(s) from official GPU PDF (${targetNomfic || gpuPdf.url})${mapSummary}`,
         );
       } else {
         logStep(
@@ -606,8 +630,14 @@ export async function runPluAnalysisPipeline(
           ? (obj.properties as Record<string, unknown>)
           : obj;
       const label =
-        props.libelle || props.lib_id || props.typepsc || props.typeinf || props.txt;
-      return typeof label === "string" && label.trim() ? label.trim() : undefined;
+        props.libelle ||
+        props.lib_id ||
+        props.typepsc ||
+        props.typeinf ||
+        props.txt;
+      return typeof label === "string" && label.trim()
+        ? label.trim()
+        : undefined;
     };
 
     const gisContextParts: string[] = [];
@@ -639,7 +669,7 @@ export async function runPluAnalysisPipeline(
     }
 
     const interpretation = await interpretRegulationsWithOllama({
-      prompt: input.prompt,
+      prompt: effectivePrompt,
       model: resolvedModel,
       fallbackModels,
       parcelSurfaceM2: parcelDoc?.surfaceM2 ?? null,
@@ -747,7 +777,7 @@ export async function runPluAnalysisPipeline(
         replayedFrom: input.replayedFromSnapshotId
           ? Number(input.replayedFromSnapshotId)
           : undefined,
-        originalPrompt: input.prompt,
+        originalPrompt: effectivePrompt,
         submittedPayload: input as unknown as Record<string, unknown>,
         addressQuery: input.address,
         cadastralReferences: {
@@ -802,8 +832,8 @@ export async function runPluAnalysisPipeline(
     const promptHistory = await payload.create({
       collection: "prompt-history",
       data: {
-        promptPreview: input.prompt.slice(0, 120),
-        promptText: input.prompt,
+        promptPreview: effectivePrompt.slice(0, 120),
+        promptText: effectivePrompt,
         submittedPayload: input as unknown as Record<string, unknown>,
         version: nextVersion,
         isReplay: Boolean(input.replayedFromSnapshotId),

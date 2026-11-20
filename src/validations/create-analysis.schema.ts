@@ -15,7 +15,7 @@ export const createAnalysisSchema = z
       })
       .nullable(),
     aiModel: z.string().optional(),
-    prompt: z.string().trim().min(1, "Le prompt d'analyse est requis."),
+    prompt: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.locationMode === "address" && !data.address.trim()) {

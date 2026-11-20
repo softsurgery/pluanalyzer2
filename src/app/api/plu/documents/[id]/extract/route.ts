@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { NextResponse } from 'next/server'
 import { canExecuteAnalysis, getPayloadWithUser } from '@/lib/payload-auth'
-import { extractPdfTextAndArticles } from '@/services/plu/pdf-extractor'
+import { PdfExtractor } from '@/services/pdf'
 
 export async function POST(
   _request: Request,
@@ -40,7 +40,7 @@ export async function POST(
       const filePath = path.resolve(process.cwd(), 'uploads/media', media.filename)
       buffer = await fs.readFile(filePath)
     }
-    const extraction = await extractPdfTextAndArticles(buffer)
+    const extraction = await PdfExtractor.extractTextAndArticles(buffer)
 
     const updated = await payload.update({
       collection: 'documents',
@@ -61,6 +61,7 @@ export async function POST(
     return NextResponse.json({
       document: updated,
       articles: extraction.articles,
+      contentMap: extraction.contentMap,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Extraction failed'

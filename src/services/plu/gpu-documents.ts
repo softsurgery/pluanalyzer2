@@ -1,16 +1,21 @@
 import type { Payload } from 'payload'
 import { fetchJsonWithTimeout } from '@/services/plu/http'
-import { extractPdfTextAndArticles, parsePluArticles } from '@/services/plu/pdf-extractor'
-import type { ExtractedArticle, GPUDocumentInfo, GPUDocumentsResult } from '@/services/plu/types'
+import { PdfContentMapper, PdfExtractor } from '@/services/pdf'
+import type {
+  ExtractedArticle,
+  GPUDocumentInfo,
+  GPUDocumentsResult,
+  PluContentMap,
+} from '@/services/plu/types'
 
 const MAX_GPU_PDF_BYTES = 100 * 1024 * 1024
 const GPU_PDF_FETCH_TIMEOUT_MS = 120000
 const MAX_CACHED_GPU_PDFS = 10
 
-// In-memory cache of extracted text & articles keyed by PDF URL to avoid re-downloading large (50+ MB) PLUi PDFs
+// In-memory cache of extracted text, articles & content map keyed by PDF URL to avoid re-downloading large (50+ MB) PLUi PDFs
 const gpuPdfExtractionCache = new Map<
   string,
-  { url: string; text: string; articles: ExtractedArticle[] }
+  { url: string; text: string; articles: ExtractedArticle[]; contentMap?: PluContentMap }
 >()
 
 interface GpuApiDocument {
@@ -83,10 +88,6 @@ export async function fetchGpuDocuments(
   }
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
 const STOP_WORDS = new Set([
   'pour', 'avec', 'dans', 'une', 'des', 'les', 'est', 'sont', 'sur', 'par',
   'que', 'qui', 'quoi', 'quel', 'quelle', 'quelles', 'quels', 'cette', 'cet',
@@ -95,10 +96,7 @@ const STOP_WORDS = new Set([
 
 function extractPromptKeywords(prompt?: string): string[] {
   if (!prompt) return []
-  const tokens = prompt
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+  const tokens = PdfContentMapper.normalizeText(prompt)
     .split(/[^a-z0-9]+/)
     .filter((w) => w.length >= 4 && !STOP_WORDS.has(w))
   return Array.from(new Set(tokens)).slice(0, 12)
@@ -119,11 +117,12 @@ export function selectArticlesForZone(
     return articles.slice(0, maxArticles)
   }
 
-  const zonePattern = escapeRegExp(zoneCode)
-  const parentZone = zoneCode.replace(/[0-9a-z]+$/i, '')
+  const zonePattern = PdfContentMapper.escapeRegExp(zoneCode)
+  // Strip trailing sub-zone suffixes (e.g. "UAa" -> "UA", "UC1" -> "UC") without erasing uppercase base letters
+  const parentZone = zoneCode.replace(/(?<=[A-Z])[0-9a-z]+$/, '')
   const parentPattern =
     parentZone && parentZone !== zoneCode && parentZone.length >= 2
-      ? escapeRegExp(parentZone)
+      ? PdfContentMapper.escapeRegExp(parentZone)
       : null
   const headerZoneRegex = new RegExp(`\\b${zonePattern}\\b`, 'i')
   const regKeywords =
@@ -145,10 +144,7 @@ export function selectArticlesForZone(
       if (regKeywords.test(a.content)) score += 4
 
       if (promptKeywords.length > 0) {
-        const normalized = `${a.title} ${a.content}`
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
+        const normalized = PdfContentMapper.normalizeText(`${a.title} ${a.content}`)
         for (const kw of promptKeywords) {
           if (normalized.includes(kw)) score += 3
         }
@@ -174,7 +170,7 @@ export function selectArticlesForZone(
   const sectionArticles: ExtractedArticle[] = []
   if (bodyMatch && typeof bodyMatch.index === 'number') {
     const slice = fullText.slice(bodyMatch.index, bodyMatch.index + 80000)
-    sectionArticles.push(...parsePluArticles(slice))
+    sectionArticles.push(...PdfExtractor.parseArticles(slice))
   }
 
   const combined = [...sectionArticles, ...scored]
@@ -201,7 +197,12 @@ export async function fetchGpuRegulationPdfText(params: {
   codeInsee?: string
   projectId?: number
   payload?: Payload
-}): Promise<{ url?: string; articles: ExtractedArticle[]; error?: string }> {
+}): Promise<{
+  url?: string
+  articles: ExtractedArticle[]
+  contentMap?: PluContentMap
+  error?: string
+}> {
   const baseUrl =
     process.env.GPU_API_BASE_URL || 'https://www.geoportail-urbanisme.gouv.fr/api'
 
@@ -231,7 +232,9 @@ export async function fetchGpuRegulationPdfText(params: {
   }
 
   let pdfUrl = candidateUrls[0]
-  let cachedExtraction: { url: string; text: string; articles: ExtractedArticle[] } | undefined
+  let cachedExtraction:
+    | { url: string; text: string; articles: ExtractedArticle[]; contentMap?: PluContentMap }
+    | undefined
 
   for (const candidateUrl of candidateUrls) {
     const hit = gpuPdfExtractionCache.get(candidateUrl)
@@ -262,10 +265,13 @@ export async function fetchGpuRegulationPdfText(params: {
         console.log(
           `[GPU PDF] Reusing Payload document #${existing.id} (gpuDocumentId=${params.gpuDocId})`,
         )
+        const cleanedText = PdfExtractor.cleanAndCondenseText(existing.extractedText)
+        const articles = PdfExtractor.parseArticles(cleanedText)
+
         cachedExtraction = {
           url: existing.sourceUrl || pdfUrl,
-          text: existing.extractedText,
-          articles: parsePluArticles(existing.extractedText),
+          text: cleanedText,
+          articles,
         }
         pdfUrl = cachedExtraction.url
       }
@@ -319,17 +325,25 @@ export async function fetchGpuRegulationPdfText(params: {
   try {
     let extractionText: string
     let extractionArticles: ExtractedArticle[]
+    let extractionContentMap: PluContentMap | undefined
 
-    if (cachedExtraction) {
-      extractionText = cachedExtraction.text
-      extractionArticles = cachedExtraction.articles
-    } else {
-      const extraction = await extractPdfTextAndArticles(pdfBuffer!)
-      if (extraction.articles.length === 0 && !extraction.text) {
-        return { url: pdfUrl, articles: [], error: extraction.error || 'No text extracted from GPU PDF' }
-      }
-      extractionText = extraction.text
-      extractionArticles = extraction.articles
+      let extractionStatus: 'extracted' | 'ocr_required' | 'ocr_completed' | 'failed' = 'extracted'
+      let extractionPageCount = 0
+
+      if (cachedExtraction) {
+        extractionText = cachedExtraction.text
+        extractionArticles = cachedExtraction.articles
+        extractionContentMap = cachedExtraction.contentMap
+      } else {
+        const extraction = await PdfExtractor.extractTextAndArticles(pdfBuffer!)
+        if (extraction.articles.length === 0 && !extraction.text) {
+          return { url: pdfUrl, articles: [], error: extraction.error || 'No text extracted from GPU PDF' }
+        }
+        extractionText = extraction.text
+        extractionArticles = extraction.articles
+        extractionContentMap = extraction.contentMap
+        extractionStatus = extraction.status
+        extractionPageCount = extraction.pageCount
 
       if (gpuPdfExtractionCache.size >= MAX_CACHED_GPU_PDFS) {
         const oldestKey = gpuPdfExtractionCache.keys().next().value
@@ -339,6 +353,7 @@ export async function fetchGpuRegulationPdfText(params: {
         url: pdfUrl,
         text: extractionText,
         articles: extractionArticles,
+        contentMap: extractionContentMap,
       })
 
       // Persist downloaded PDF into `media` (stored in RustFS S3) and link from `documents`
@@ -371,7 +386,7 @@ export async function fetchGpuRegulationPdfText(params: {
               },
             }))
 
-          const sanitizedText = extractionText.replace(/\u0000/g, '')
+          const sanitizedText = PdfExtractor.cleanAndCondenseText(extractionText)
           const createdDoc = await params.payload.create({
             collection: 'documents',
             data: {
@@ -383,9 +398,9 @@ export async function fetchGpuRegulationPdfText(params: {
               zoneCode: params.zoneCode,
               gpuDocumentId: params.gpuDocId,
               sourceUrl: pdfUrl,
-              pageCount: extraction.pageCount,
+              pageCount: extractionPageCount,
               extractionStatus:
-                extraction.status === 'ocr_completed' ? 'ocr_completed' : 'extracted',
+                extractionStatus === 'ocr_completed' ? 'ocr_completed' : 'extracted',
               extractedText: sanitizedText,
               ...(params.projectId ? { project: params.projectId } : {}),
             },
@@ -408,6 +423,7 @@ export async function fetchGpuRegulationPdfText(params: {
         extractionArticles,
         params.zoneCode,
       ),
+      contentMap: extractionContentMap,
     }
   } catch (err) {
     return {

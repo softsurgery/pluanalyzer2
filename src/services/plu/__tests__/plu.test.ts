@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsePluArticles } from '@/services/plu/pdf-extractor'
+import { PdfExtractor } from '@/services/pdf'
 import { validateRegulatoryRules } from '@/services/plu/regulatory-validator'
 import { calculateConstructibility } from '@/services/plu/constructibility'
 import { buildArchicadExport } from '@/services/plu/archicad-export'
@@ -31,9 +31,9 @@ L'emprise au sol maximale est de 60%.
 ARTICLE UA 10 : Hauteur maximale
 La hauteur maximale est de 15 mètres.
 `
-    const articles = parsePluArticles(text)
+    const articles = PdfExtractor.parseArticles(text)
     expect(articles).toHaveLength(3)
-    expect(articles[0].articleNumber).toBe('Article UA')
+    expect(articles[0].articleNumber).toBe('Article UA 6')
     expect(articles[1].content).toContain('60%')
   })
 
