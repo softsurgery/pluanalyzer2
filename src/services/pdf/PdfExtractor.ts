@@ -4,9 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
+  DEFAULT_MISTRAL_OCR_MODEL,
   DEFAULT_OCR_COMMAND,
   DEFAULT_OCR_LANGUAGE,
   DEFAULT_OCR_TIMEOUT_MS,
+  DEFAULT_PAGE_WINDOW_AFTER,
+  DEFAULT_PAGE_WINDOW_BEFORE,
+  DEFAULT_PDFTOTEXT_COMMAND,
+  DEFAULT_PDFTOTEXT_TIMEOUT_MS,
   MIN_DIGITAL_TEXT_CHARS,
   STRUCTURAL_LINE_START,
 } from "@/services/pdf/constants";
@@ -17,9 +22,11 @@ import type {
   PDFExtractionResult,
   PdfOcrOptions,
   PdfPageInput,
+  PdfPageRangeOptions,
   PdfParsePageData,
   PdfParseResult,
   PdfParsedDocument,
+  PdfTextEngine,
   PluContentMap,
 } from "@/types/pdf";
 
@@ -279,6 +286,158 @@ export class PdfExtractor {
   }
 
   /**
+   * Extract a `#page=<N>` hint from a PDF URL fragment (e.g. `reglement.pdf#page=42`).
+   */
+  static parsePageHintFromUrl(url?: string): number | undefined {
+    if (!url) return undefined;
+    const match = url.match(/#(?:.*&)?page=(\d+)/i);
+    if (!match) return undefined;
+    const parsed = Number.parseInt(match[1], 10);
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : undefined;
+  }
+
+  /**
+   * Resolve a targeted `[firstPage, lastPage]` extraction window from explicit bounds or `pageHint`
+   * (defaulting to `pageHint - 10` through `pageHint + 60`).
+   */
+  static resolvePageWindow(
+    options?: PdfPageRangeOptions,
+  ): { firstPage: number; lastPage: number } | undefined {
+    if (!options) return undefined;
+    if (
+      typeof options.firstPage === "number" &&
+      typeof options.lastPage === "number" &&
+      options.firstPage >= 1 &&
+      options.lastPage >= options.firstPage
+    ) {
+      return {
+        firstPage: Math.floor(options.firstPage),
+        lastPage: Math.floor(options.lastPage),
+      };
+    }
+    if (typeof options.pageHint === "number" && options.pageHint >= 1) {
+      const before = options.windowBefore ?? DEFAULT_PAGE_WINDOW_BEFORE;
+      const after = options.windowAfter ?? DEFAULT_PAGE_WINDOW_AFTER;
+      const firstPage = Math.max(1, Math.floor(options.pageHint) - before);
+      const lastPage = Math.max(firstPage, Math.floor(options.pageHint) + after);
+      return { firstPage, lastPage };
+    }
+    return undefined;
+  }
+
+  /**
+   * Primary text extraction engine using Poppler's `pdftotext -enc UTF-8`.
+   * Supports `-f` / `-l` page range flags for targeted Territory/PLUi page-window extraction.
+   */
+  static async extractTextWithPdftotext(
+    bufferOrPath: Buffer | string,
+    options: PdfPageRangeOptions = {},
+  ): Promise<{
+    text: string;
+    pages: PdfPageInput[];
+    pageCount: number;
+    pageWindow?: { firstPage: number; lastPage: number };
+  }> {
+    const pdftotextCmd =
+      process.env.PDFTOTEXT_COMMAND || DEFAULT_PDFTOTEXT_COMMAND;
+    const timeout = DEFAULT_PDFTOTEXT_TIMEOUT_MS;
+    const pageWindow = PdfExtractor.resolvePageWindow(options);
+
+    let tmpDir: string | undefined;
+    let pdfPath: string;
+    if (typeof bufferOrPath === "string") {
+      pdfPath = bufferOrPath;
+    } else {
+      tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "plu-pdftotext-"));
+      pdfPath = path.join(tmpDir, "input.pdf");
+      await fs.writeFile(pdfPath, bufferOrPath);
+    }
+
+    const args = ["-enc", "UTF-8"];
+    if (pageWindow) {
+      args.push("-f", String(pageWindow.firstPage), "-l", String(pageWindow.lastPage));
+    }
+    args.push(pdfPath, "-");
+
+    try {
+      const { stdout } = await execFileAsync(pdftotextCmd, args, {
+        timeout,
+        maxBuffer: 64 * 1024 * 1024,
+      });
+
+      const startPage = pageWindow?.firstPage ?? 1;
+      const rawPages = stdout.split("\f");
+      // pdftotext often appends a trailing form-feed producing an empty final element
+      if (rawPages.length > 1 && rawPages[rawPages.length - 1].trim() === "") {
+        rawPages.pop();
+      }
+
+      const pages: PdfPageInput[] = rawPages.map((pageText, idx) => ({
+        pageNumber: startPage + idx,
+        text: pageText.replace(/\u0000/g, ""),
+      }));
+
+      const cleaned = PdfExtractor.cleanAndCondenseText(stdout);
+      return {
+        text: cleaned,
+        pages,
+        pageCount: pages.length || 1,
+        pageWindow,
+      };
+    } finally {
+      if (tmpDir) {
+        await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Optional Mistral OCR helper (`mistral-ocr-latest`) for scanned PDFs when `MISTRAL_API_KEY` is configured.
+   */
+  static async extractPDFTextViaMistralOCR(
+    buffer: Buffer,
+    options: { apiKey?: string; model?: string; timeoutMs?: number } = {},
+  ): Promise<string> {
+    const apiKey = options.apiKey || process.env.MISTRAL_API_KEY;
+    if (!apiKey) {
+      throw new Error("MISTRAL_API_KEY is not configured for Mistral OCR");
+    }
+
+    const model = options.model || process.env.MISTRAL_OCR_MODEL || DEFAULT_MISTRAL_OCR_MODEL;
+    const timeoutMs = options.timeoutMs ?? DEFAULT_OCR_TIMEOUT_MS;
+    const base64Pdf = buffer.toString("base64");
+
+    const response = await fetch("https://api.mistral.ai/v1/ocr", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        document: {
+          type: "document_url",
+          document_url: `data:application/pdf;base64,${base64Pdf}`,
+        },
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      throw new Error(`Mistral OCR HTTP ${response.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const data = (await response.json()) as {
+      pages?: Array<{ markdown?: string; text?: string }>;
+    };
+    const combined = (data.pages || [])
+      .map((p) => p.markdown || p.text || "")
+      .join("\n\n");
+    return PdfExtractor.cleanAndCondenseText(combined);
+  }
+
+  /**
    * Run external CLI OCR (default: `tesseract <pdfPath> stdout -l fra`) on a PDF buffer.
    * Writes the buffer to an isolated temporary directory, cleans and condenses the OCR output,
    * and guarantees temporary file cleanup on exit.
@@ -313,15 +472,42 @@ export class PdfExtractor {
   // ============================================================================
 
   /**
-   * Extract only the deterministic `PluContentMap` from a PDF buffer by parsing
-   * per-page text and delegating to `PdfContentMapper.buildFromPages`.
+   * Extract only the deterministic `PluContentMap` from a PDF buffer or path using the same
+   * `pdftotext` primary + `pdf-parse` fallback pipeline as `extractTextAndArticles`.
    */
   static async extractContentMap(
-    buffer: Buffer,
-    options: ContentMapOptions = {},
+    bufferOrPath: Buffer | string,
+    options: ContentMapOptions & PdfPageRangeOptions = {},
   ): Promise<PluContentMap> {
+    const pageWindow = PdfExtractor.resolvePageWindow(options);
+    try {
+      const pdftotextRes = await PdfExtractor.extractTextWithPdftotext(
+        bufferOrPath,
+        options,
+      );
+      if (pdftotextRes.text.length >= MIN_DIGITAL_TEXT_CHARS) {
+        return PdfContentMapper.buildFromPages(pdftotextRes.pages, {
+          ...options,
+          pdfInfo: options.pdfInfo ?? null,
+        });
+      }
+    } catch {
+      // Fall back to pdf-parse below
+    }
+
+    const buffer =
+      typeof bufferOrPath === "string"
+        ? await fs.readFile(bufferOrPath)
+        : bufferOrPath;
     const { parsed, pages } = await PdfExtractor.parseBufferWithPages(buffer);
-    return PdfContentMapper.buildFromPages(pages, {
+    const filteredPages = pageWindow
+      ? pages.filter(
+          (p) =>
+            p.pageNumber >= pageWindow.firstPage &&
+            p.pageNumber <= pageWindow.lastPage,
+        )
+      : pages;
+    return PdfContentMapper.buildFromPages(filteredPages, {
       ...options,
       pdfInfo: options.pdfInfo ?? parsed.info ?? null,
     });
@@ -329,24 +515,65 @@ export class PdfExtractor {
 
   /**
    * End-to-end PDF extraction pipeline:
-   * 1. Parses the PDF buffer page-by-page (`parseBufferWithPages`).
-   * 2. Cleans and condenses the full text (`cleanAndCondenseText`).
+   * 1. Primary engine: `pdftotext -enc UTF-8` (supports `-f`/`-l` page windows via `pageHint` or explicit bounds).
+   * 2. Fallback engine: `pdf-parse` (`parseBufferWithPages`) if `pdftotext` fails or returns minimal text.
    * 3. Builds the deterministic logical content map (`PdfContentMapper.buildFromPages`).
    * 4. If selectable text meets the digital threshold (>= 80 chars), segments articles and returns `"extracted"`.
-   * 5. Otherwise, if `OCR_ENABLED=true`, runs Tesseract OCR fallback (`runOcrFallback`) and rebuilds the content map.
+   * 5. Otherwise, attempts Mistral OCR (`MISTRAL_API_KEY`) or Tesseract OCR (`OCR_ENABLED=true`).
    * 6. Returns `"ocr_required"` or `"failed"` with diagnostic metadata when text cannot be recovered.
    */
   static async extractTextAndArticles(
-    buffer: Buffer,
-    options: ContentMapOptions = {},
+    bufferOrPath: Buffer | string,
+    options: ContentMapOptions & PdfPageRangeOptions = {},
   ): Promise<PDFExtractionResult> {
     try {
-      const { parsed, pages } = await PdfExtractor.parseBufferWithPages(buffer);
-      const rawText = PdfExtractor.cleanAndCondenseText(parsed.text || "");
-      const pageCount = parsed.numpages || pages.length || 1;
+      let rawText = "";
+      let pages: PdfPageInput[] = [];
+      let pageCount = 1;
+      let pdfInfo: Record<string, unknown> | null = options.pdfInfo ?? null;
+      let engineUsed: PdfTextEngine = "pdftotext";
+      const pageWindow = PdfExtractor.resolvePageWindow(options);
+
+      // Primary: fast native Poppler `pdftotext -enc UTF-8`
+      try {
+        const pdftotextRes = await PdfExtractor.extractTextWithPdftotext(
+          bufferOrPath,
+          options,
+        );
+        rawText = pdftotextRes.text;
+        pages = pdftotextRes.pages;
+        pageCount = pdftotextRes.pageCount;
+      } catch {
+        // Ignore pdftotext failure and fall back to pdf-parse below
+      }
+
+      // Fallback: pdf-parse when pdftotext is unavailable, failed, or yielded minimal text
+      if (rawText.length < MIN_DIGITAL_TEXT_CHARS) {
+        const buffer =
+          typeof bufferOrPath === "string"
+            ? await fs.readFile(bufferOrPath)
+            : bufferOrPath;
+        const { parsed, pages: parsedPages } =
+          await PdfExtractor.parseBufferWithPages(buffer);
+        const pdfParseText = PdfExtractor.cleanAndCondenseText(parsed.text || "");
+        if (pdfParseText.length > rawText.length) {
+          rawText = pdfParseText;
+          pages = pageWindow
+            ? parsedPages.filter(
+                (p) =>
+                  p.pageNumber >= pageWindow.firstPage &&
+                  p.pageNumber <= pageWindow.lastPage,
+              )
+            : parsedPages;
+          pageCount = parsed.numpages || parsedPages.length || 1;
+          pdfInfo = pdfInfo ?? parsed.info ?? null;
+          engineUsed = "pdf-parse";
+        }
+      }
+
       const contentMap = PdfContentMapper.buildFromPages(pages, {
         ...options,
-        pdfInfo: options.pdfInfo ?? parsed.info ?? null,
+        pdfInfo,
       });
 
       // Digital PDF with sufficient selectable text
@@ -358,14 +585,48 @@ export class PdfExtractor {
           text: rawText,
           articles: PdfExtractor.parseArticles(rawText),
           ocrAttempted: false,
+          engineUsed,
+          pageWindow,
           contentMap,
         };
+      }
+
+      const bufferForOcr =
+        typeof bufferOrPath === "string"
+          ? await fs.readFile(bufferOrPath)
+          : bufferOrPath;
+
+      // Scanned PDF: optional Mistral OCR fallback
+      if (process.env.MISTRAL_API_KEY) {
+        try {
+          const mistralText = await PdfExtractor.extractPDFTextViaMistralOCR(
+            bufferForOcr,
+          );
+          if (mistralText.length >= MIN_DIGITAL_TEXT_CHARS) {
+            return {
+              status: "ocr_completed",
+              pageCount,
+              charCount: mistralText.length,
+              text: mistralText,
+              articles: PdfExtractor.parseArticles(mistralText),
+              ocrAttempted: true,
+              engineUsed: "mistral-ocr",
+              pageWindow,
+              contentMap: PdfContentMapper.buildFromText(mistralText, {
+                ...options,
+                pdfInfo,
+              }),
+            };
+          }
+        } catch {
+          // Continue to Tesseract fallback if enabled
+        }
       }
 
       // Scanned PDF: attempt CLI OCR fallback when enabled in environment
       if (process.env.OCR_ENABLED === "true") {
         try {
-          const ocrText = await PdfExtractor.runOcrFallback(buffer);
+          const ocrText = await PdfExtractor.runOcrFallback(bufferForOcr);
           if (ocrText.length > 0) {
             return {
               status: "ocr_completed",
@@ -374,9 +635,11 @@ export class PdfExtractor {
               text: ocrText,
               articles: PdfExtractor.parseArticles(ocrText),
               ocrAttempted: true,
+              engineUsed: "tesseract",
+              pageWindow,
               contentMap: PdfContentMapper.buildFromText(ocrText, {
                 ...options,
-                pdfInfo: options.pdfInfo ?? parsed.info ?? null,
+                pdfInfo,
               }),
             };
           }
@@ -388,6 +651,8 @@ export class PdfExtractor {
             text: rawText,
             articles: PdfExtractor.parseArticles(rawText),
             ocrAttempted: true,
+            engineUsed,
+            pageWindow,
             contentMap,
             error: `OCR failed: ${ocrErr instanceof Error ? ocrErr.message : "Unknown error"}`,
           };
@@ -401,6 +666,8 @@ export class PdfExtractor {
         text: rawText,
         articles: PdfExtractor.parseArticles(rawText),
         ocrAttempted: false,
+        engineUsed,
+        pageWindow,
         contentMap,
         error:
           "PDF contains minimal selectable text; OCR is required for scanned document.",

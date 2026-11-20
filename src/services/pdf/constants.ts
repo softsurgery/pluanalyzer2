@@ -24,6 +24,16 @@ export const DEFAULT_OCR_COMMAND = "tesseract";
 export const DEFAULT_OCR_LANGUAGE = "fra";
 export const DEFAULT_OCR_TIMEOUT_MS = 30000;
 
+/**
+ * Primary native Poppler CLI (`pdftotext`) command and timeout, plus targeted page-window defaults
+ * for `#page=` URL fragments (`pageHint - 10` to `pageHint + 60`).
+ */
+export const DEFAULT_PDFTOTEXT_COMMAND = "pdftotext";
+export const DEFAULT_PDFTOTEXT_TIMEOUT_MS = 30000;
+export const DEFAULT_PAGE_WINDOW_BEFORE = 10;
+export const DEFAULT_PAGE_WINDOW_AFTER = 60;
+export const DEFAULT_MISTRAL_OCR_MODEL = "mistral-ocr-latest";
+
 // ============================================================================
 // Logical Content Mapping Dictionaries & Patterns
 // ============================================================================

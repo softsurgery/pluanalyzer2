@@ -30,8 +30,20 @@ export interface PDFExtractionResult {
   text: string;
   articles: ExtractedArticle[];
   ocrAttempted: boolean;
+  engineUsed?: PdfTextEngine;
+  pageWindow?: { firstPage: number; lastPage: number };
   contentMap?: PluContentMap;
   error?: string;
+}
+
+export type PdfTextEngine = "pdftotext" | "pdf-parse" | "tesseract" | "mistral-ocr";
+
+export interface PdfPageRangeOptions {
+  firstPage?: number;
+  lastPage?: number;
+  pageHint?: number;
+  windowBefore?: number;
+  windowAfter?: number;
 }
 
 /**
@@ -388,4 +400,28 @@ export interface PageSubjectSummaryInput {
 export interface PageSubjectSummary {
   mainSubject: string;
   description: string;
+}
+
+// ============================================================================
+// PDF Download, Disk Caching & Async Job Types
+// ============================================================================
+
+export interface PdfDownloadResult {
+  filePath: string;
+  buffer: Buffer;
+  cached: boolean;
+  sourceUrl: string;
+  pageHint?: number;
+  bytes: number;
+}
+
+export type PdfExtractionJobStatus = "pending" | "completed" | "failed";
+
+export interface PdfExtractionJob<T = unknown> {
+  jobKey: string;
+  status: PdfExtractionJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  result?: T;
+  error?: string;
 }

@@ -10,7 +10,10 @@ import {
 } from "@/services/plu/gpu-documents";
 import { PdfExtractor } from "@/services/pdf";
 import { interpretRegulationsWithOllama } from "@/services/plu/ollama-interpreter";
-import { validateRegulatoryRules } from "@/services/plu/regulatory-validator";
+import {
+  mergeGraphicRules,
+  validateRegulatoryRules,
+} from "@/services/plu/regulatory-validator";
 import { calculateConstructibility } from "@/services/plu/constructibility";
 import { buildArchicadExport } from "@/services/plu/archicad-export";
 import type {
@@ -681,6 +684,27 @@ export async function runPluAnalysisPipeline(
       maxContextChars: maxPdfCharsToAi,
       maxArticles: maxPdfArticlesToAi,
     });
+
+    // Overlay official ArcGIS graphic rules when available
+    if (arcgisResult?.features && arcgisResult.features.length > 0) {
+      const graphicOverlay = mergeGraphicRules(interpretation.rules, {
+        arcgisFeatures: arcgisResult.features,
+        details: interpretation.details,
+        warnings: interpretation.warnings,
+      });
+      interpretation.rules = graphicOverlay.rules;
+      if (graphicOverlay.details) {
+        interpretation.details = graphicOverlay.details;
+      }
+      if (graphicOverlay.overlaidFields.length > 0) {
+        logStep(
+          "graphic_rules_overlay",
+          "ok",
+          aiStart,
+          `Overlaid ArcGIS graphic rules: ${graphicOverlay.overlaidFields.join(", ")}`,
+        );
+      }
+    }
     console.log(
       `[PLU Pipeline] [${executionCode}] Ollama AI Pipeline finished: status=${interpretation.status} model=${interpretation.model} citations=${interpretation.citations.length} warnings=${interpretation.warnings.length}`,
     );

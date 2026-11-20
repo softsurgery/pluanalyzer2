@@ -1,5 +1,6 @@
 export { PdfExtractor } from "@/services/pdf/PdfExtractor";
 export { PdfContentMapper } from "@/services/pdf/PdfContentMapper";
+export { PdfDownloadService } from "@/services/pdf/PdfDownloadService";
 export {
   DEFAULT_OCR_COMMAND,
   DEFAULT_OCR_LANGUAGE,

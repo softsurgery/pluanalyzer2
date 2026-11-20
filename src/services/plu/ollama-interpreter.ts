@@ -4,6 +4,16 @@ import {
   PromptBuilder,
   PromptTemplate,
 } from "@/services/ai-pipeline";
+import {
+  DEFAULT_SUB_CHUNK_CHARS,
+  filterSubZoneArticles,
+} from "@/services/plu/article-selection";
+import {
+  extractDeterministicRulesFromArticles,
+  MAX_AI_CALLS_PER_FLOW,
+  runTargetedRecoveryPasses,
+} from "@/services/plu/regulatory-recovery";
+import { validateAndSanitizeExtractedRules } from "@/services/plu/regulatory-validator";
 import type {
   ExtractedArticle,
   OllamaInterpretationResult,
@@ -67,8 +77,9 @@ export function buildPluRegulatorySystemPrompt(): string {
       "PLUSIEURS RÈGLES DANS UNE PHRASE : sépare-les, mais ne change aucun mot ni aucun chiffre.",
     ])
     .section("CITATIONS OBLIGATOIRES", [
-      "Chaque règle extraite est accompagnée d’une citation COPIÉE MOT POUR MOT du texte fourni (au moins 12 mots) et du numéro de l’article. Pas de reformulation, pas de « … » au milieu d’une phrase pour en changer le sens, pas de citation inventée. Le code vérifiera chaque citation dans le texte : une citation fausse fait rejeter la règle.",
-      "Si tu ne peux pas citer le passage exact, la valeur est null.",
+      "Chaque règle extraite est accompagnée d’une citation COPIÉE MOT POUR MOT du texte fourni (au moins 20 mots) et du numéro de l’article. Pas de reformulation, pas de « … » au milieu d’une phrase pour en changer le sens, pas de citation inventée. Le code vérifiera chaque citation dans le texte : une citation fausse fait rejeter la règle.",
+      "CONTRAINTES D’UNITÉS STRICTES : maxCoverageRatio (emprise) et minGreenRatio (espaces verts) sont TOUJOURS des ratios issus d’un pourcentage (ex: 40 % → 0.40), JAMAIS des mètres. maxHeightM, maxEavesHeightM et les reculs (frontSetbackM, sideSetbackM, rearSetbackM) sont TOUJOURS en mètres, JAMAIS en pourcentage.",
+      "Si tu ne peux pas citer le passage exact d’au moins 20 mots, la valeur est null.",
     ])
     .examples("CE QUE TU NE FAIS JAMAIS (exemples)", {
       forbidden: [
@@ -391,20 +402,151 @@ export function createPluRegulatoryExtractionPipeline(ollama?: OllamaService) {
         error: error.message,
       };
     },
-    temperature: 0.1,
+    temperature: 0,
     timeoutMs: 60000,
     maxRepairAttempts: 1,
   });
 }
 
 /**
- * Interpret official PLU regulatory articles using the Ollama AI Pipeline.
- * Strictly refuses to fabricate rules when no regulatory text is supplied or when Ollama is disabled.
+ * Interpret official PLU regulatory articles using the Ollama AI Pipeline,
+ * followed by:
+ * - Sub-chunked resilient fallback (<= 11,000 chars) if the primary pass fails
+ * - Targeted multi-pass recovery (Aspect/Parking Articles 11-12 or TITLE_PATTERNS + Core Rule Recovery with 20-word verbatim citation check)
+ * - Deterministic regex fallbacks (depth-based emprise, facade height, green ratio, setbacks, parking)
+ * - Strict post-extraction validation (`validateRule` -> "Voir PDF officiel" on suspicious values)
  */
 export async function interpretRegulationsWithOllama(
   params: InterpretRegulationsParams,
 ): Promise<OllamaInterpretationResult> {
-  const pipeline = createPluRegulatoryExtractionPipeline(params.ollama);
-  const result = await pipeline.execute(params);
-  return result.output;
+  const ollama = params.ollama ?? getOllamaService();
+  const filteredArticles = filterSubZoneArticles(params.articles, params.zoneCode);
+  const effectiveArticles =
+    filteredArticles.length > 0 ? filteredArticles : params.articles;
+
+  const pipeline = createPluRegulatoryExtractionPipeline(ollama);
+  const result = await pipeline.execute({
+    ...params,
+    articles: effectiveArticles,
+  });
+  let output = result.output;
+
+  // If short-circuited due to missing articles or disabled Ollama, still return deterministic regex fallback if articles exist
+  if (output.status === "insufficient_data" || output.status === "unconfigured") {
+    if (effectiveArticles.length > 0) {
+      const deterministic = extractDeterministicRulesFromArticles(effectiveArticles);
+      const mergedRules: StructuredRegulatoryRules = {
+        ...output.rules,
+      };
+      for (const [k, v] of Object.entries(deterministic.rules)) {
+        const key = k as keyof StructuredRegulatoryRules;
+        if (typeof v === "number" && mergedRules[key] === null) {
+          mergedRules[key] = v;
+        }
+      }
+      const sanitized = validateAndSanitizeExtractedRules({
+        rules: mergedRules,
+        details: deterministic.details,
+        warnings: output.warnings,
+      });
+      return {
+        ...output,
+        rules: sanitized.rules,
+        details: sanitized.details,
+        warnings: sanitized.warnings,
+      };
+    }
+    return output;
+  }
+
+  // Resilient sub-chunked retry (<= 11,000 chars) if the primary pass failed (e.g. 413/429/404/timeout)
+  let aiCallsUsed = 1;
+  if (output.status === "error" && effectiveArticles.length > 0) {
+    aiCallsUsed += 1;
+    const subResult = await pipeline.execute({
+      ...params,
+      articles: effectiveArticles,
+      maxContextChars: DEFAULT_SUB_CHUNK_CHARS,
+      maxArticles: Math.min(params.maxArticles ?? 15, 15),
+    });
+    if (subResult.output.status === "ok") {
+      output = subResult.output;
+    }
+  }
+
+  const warnings = [...output.warnings];
+  let rules: StructuredRegulatoryRules = { ...output.rules };
+  let details: Record<string, string> = { ...(output.details || {}) };
+  let citations = [...output.citations];
+
+  // Run deterministic regex fallbacks FIRST so we don't spend AI calls on rules already recoverable deterministically
+  if (effectiveArticles.length > 0) {
+    const deterministic = extractDeterministicRulesFromArticles(effectiveArticles);
+    for (const [k, v] of Object.entries(deterministic.rules)) {
+      const key = k as keyof StructuredRegulatoryRules;
+      if (typeof v === "number" && rules[key] === null) {
+        rules[key] = v;
+      }
+    }
+    for (const [dk, dv] of Object.entries(deterministic.details)) {
+      if (!details[dk]) {
+        details[dk] = dv;
+      }
+    }
+    if (citations.length === 0 && deterministic.citations.length > 0) {
+      citations.push(...deterministic.citations);
+    }
+  }
+
+  // Targeted Multi-Pass Recovery (strictly capped at MAX_AI_CALLS_PER_FLOW = 5 total AI calls)
+  if (output.status === "ok" && effectiveArticles.length > 0 && aiCallsUsed < MAX_AI_CALLS_PER_FLOW) {
+    const needsRecovery =
+      (rules.maxHeightM === null && rules.maxEavesHeightM === null && rules.maxStoreys === null) ||
+      rules.maxCoverageRatio === null ||
+      rules.minGreenRatio === null ||
+      (rules.frontSetbackM === null && rules.sideSetbackM === null) ||
+      !details.aspect_exterieur ||
+      !details.stationnement ||
+      rules.parkingPerDwelling === null;
+
+    if (needsRecovery) {
+      const recovered = await runTargetedRecoveryPasses({
+        ollama,
+        model: output.model,
+        fallbackModels: params.fallbackModels,
+        zoneCode: params.zoneCode,
+        articles: effectiveArticles,
+        currentRules: rules,
+        currentDetails: details,
+        currentCitations: citations,
+        warnings,
+        initialCallsUsed: aiCallsUsed,
+        maxCalls: MAX_AI_CALLS_PER_FLOW,
+      });
+      rules = recovered.rules;
+      details = recovered.details;
+      citations = recovered.citations;
+      aiCallsUsed = recovered.callsUsed;
+    }
+  }
+
+  // If only maxEavesHeightM was found, promote it to maxHeightM so constructibility & volume are never N/A
+  if (rules.maxHeightM === null && rules.maxEavesHeightM !== null) {
+    rules.maxHeightM = rules.maxEavesHeightM;
+  }
+
+  // Strict Post-Extraction Validation (validateRule -> "Voir PDF officiel" on suspicious values)
+  const sanitized = validateAndSanitizeExtractedRules({
+    rules,
+    details,
+    warnings,
+  });
+
+  return {
+    ...output,
+    rules: sanitized.rules,
+    details: sanitized.details,
+    citations,
+    warnings: sanitized.warnings,
+  };
 }

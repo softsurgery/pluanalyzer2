@@ -16,11 +16,18 @@ export function calculateConstructibility(params: {
   const missingParameters: string[] = []
   const assumptions: string[] = []
 
+  const effectiveMaxHeightM = rules.maxHeightM ?? rules.maxEavesHeightM
+  if (rules.maxHeightM === null && rules.maxEavesHeightM !== null) {
+    assumptions.push(
+      `Using maxEavesHeightM (${rules.maxEavesHeightM}m) as height limit because maxHeightM was not separately specified.`,
+    )
+  }
+
   if (surface === null || surface <= 0) {
     missingParameters.push('parcelSurfaceM2')
   }
   if (rules.maxCoverageRatio === null) missingParameters.push('maxCoverageRatio')
-  if (rules.maxHeightM === null && rules.maxStoreys === null) {
+  if (effectiveMaxHeightM === null && rules.maxStoreys === null) {
     missingParameters.push('maxHeightM / maxStoreys')
   }
 
@@ -31,7 +38,7 @@ export function calculateConstructibility(params: {
       maxFootprintM2: null,
       estimatedBuildableFootprintM2: null,
       minGreenSpaceM2: null,
-      maxHeightM: rules.maxHeightM,
+      maxHeightM: effectiveMaxHeightM,
       estimatedStoreys: rules.maxStoreys,
       floorHeightAssumedM: DEFAULT_FLOOR_HEIGHT_M,
       maxFloorAreaSdpM2: null,
@@ -77,13 +84,13 @@ export function calculateConstructibility(params: {
   const estimatedStoreys =
     rules.maxStoreys !== null
       ? rules.maxStoreys
-      : rules.maxHeightM !== null
-        ? Math.max(1, Math.floor(rules.maxHeightM / DEFAULT_FLOOR_HEIGHT_M))
+      : effectiveMaxHeightM !== null
+        ? Math.max(1, Math.floor(effectiveMaxHeightM / DEFAULT_FLOOR_HEIGHT_M))
         : null
 
-  if (rules.maxStoreys === null && rules.maxHeightM !== null) {
+  if (rules.maxStoreys === null && effectiveMaxHeightM !== null) {
     assumptions.push(
-      `Storey count derived from maxHeightM (${rules.maxHeightM}m) / ${DEFAULT_FLOOR_HEIGHT_M}m floor-to-floor.`,
+      `Storey count derived from maxHeightM (${effectiveMaxHeightM}m) / ${DEFAULT_FLOOR_HEIGHT_M}m floor-to-floor.`,
     )
   }
 
@@ -94,8 +101,8 @@ export function calculateConstructibility(params: {
       : null
 
   const maxVolumeM3 =
-    effectiveFootprint !== null && rules.maxHeightM !== null
-      ? Number((effectiveFootprint * rules.maxHeightM).toFixed(2))
+    effectiveFootprint !== null && effectiveMaxHeightM !== null
+      ? Number((effectiveFootprint * effectiveMaxHeightM).toFixed(2))
       : null
 
   const estimatedDwellings =
@@ -118,7 +125,7 @@ export function calculateConstructibility(params: {
     maxFootprintM2,
     estimatedBuildableFootprintM2,
     minGreenSpaceM2,
-    maxHeightM: rules.maxHeightM,
+    maxHeightM: effectiveMaxHeightM,
     estimatedStoreys,
     floorHeightAssumedM: DEFAULT_FLOOR_HEIGHT_M,
     maxFloorAreaSdpM2,

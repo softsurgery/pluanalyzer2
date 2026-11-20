@@ -1,6 +1,10 @@
 import type { Payload } from 'payload'
 import { fetchJsonWithTimeout } from '@/services/plu/http'
-import { PdfContentMapper, PdfExtractor } from '@/services/pdf'
+import { PdfContentMapper, PdfDownloadService, PdfExtractor } from '@/services/pdf'
+import {
+  filterSubZoneArticles,
+  isolateZoneSection,
+} from '@/services/plu/article-selection'
 import type {
   ExtractedArticle,
   GPUDocumentInfo,
@@ -155,25 +159,14 @@ export function selectArticlesForZone(
     .sort((a, b) => b.score - a.score)
     .map((item) => item.article)
 
-  const zoneHeadingRegex = new RegExp(
-    `(?:(?:ZONE|CHAPITRE|DISPOSITIONS\\s+APPLICABLES\\s+[ÀA]\\s+LA\\s+ZONE)\\s+${zonePattern}\\b|^\\s*${zonePattern}\\s*$)`,
-    'gim',
+  // First isolate the target zone chapter (skipping TOCs in multi-zone PDFs and stopping at the next zone)
+  const isolated = isolateZoneSection(fullText, zoneCode)
+  const isolatedArticles = filterSubZoneArticles(
+    PdfExtractor.parseArticles(isolated.text),
+    zoneCode,
   )
-  const headingMatches = [...fullText.matchAll(zoneHeadingRegex)]
-  const bodyMatch =
-    headingMatches.find((m) => {
-      const idx = m.index ?? 0
-      const preview = fullText.slice(idx, idx + 1500)
-      return regKeywords.test(preview)
-    }) || headingMatches[Math.min(1, Math.max(0, headingMatches.length - 1))]
 
-  const sectionArticles: ExtractedArticle[] = []
-  if (bodyMatch && typeof bodyMatch.index === 'number') {
-    const slice = fullText.slice(bodyMatch.index, bodyMatch.index + 80000)
-    sectionArticles.push(...PdfExtractor.parseArticles(slice))
-  }
-
-  const combined = [...sectionArticles, ...scored]
+  const combined = [...isolatedArticles, ...scored]
   const deduped: ExtractedArticle[] = []
   const seen = new Set<string>()
   for (const art of combined) {
@@ -246,7 +239,22 @@ export async function fetchGpuRegulationPdfText(params: {
     }
   }
 
+  const pageHint = PdfExtractor.parsePageHintFromUrl(params.urlfic)
+  const docIdentity = params.gpuDocId || params.nomfic || pdfUrl
+  const zoneCached = PdfDownloadService.getCachedZoneResult<{
+    url?: string
+    articles: ExtractedArticle[]
+    contentMap?: PluContentMap
+  }>(docIdentity, params.zoneCode)
+  if (zoneCached) {
+    console.log(
+      `[GPU PDF] Using zone-cached extraction for ${docIdentity} (zone=${params.zoneCode || 'ALL'})`,
+    )
+    return zoneCached
+  }
+
   let pdfBuffer: Buffer | null = null
+  let pdfFilePath: string | undefined
   let lastError = 'Failed to fetch GPU regulation PDF'
 
   // Check Payload `documents` collection (backed by S3/RustFS) before downloading from GPU
@@ -283,37 +291,46 @@ export async function fetchGpuRegulationPdfText(params: {
   }
 
   if (!cachedExtraction) {
-    for (const candidateUrl of candidateUrls) {
-      pdfUrl = candidateUrl
+    const gpuUrls = [geopfDirectUrl, gpuApiUrl].filter((u): u is string => Boolean(u))
+    if (gpuUrls.length > 0) {
       try {
-        console.log(`[GPU PDF] Fetching regulation PDF: ${candidateUrl}`)
-        const response = await fetch(candidateUrl, {
-          method: 'GET',
-          headers: { Accept: 'application/pdf,*/*' },
-          signal: AbortSignal.timeout(GPU_PDF_FETCH_TIMEOUT_MS),
+        const filename = params.nomfic || `${params.gpuDocId || 'reglement'}.pdf`
+        const downloaded = await PdfDownloadService.downloadGpuPdf({
+          urls: gpuUrls,
+          filename,
+          maxBytes: MAX_GPU_PDF_BYTES,
+          timeoutMs: GPU_PDF_FETCH_TIMEOUT_MS,
         })
-        if (!response.ok) {
-          lastError = `HTTP ${response.status} fetching GPU PDF`
-          console.warn(`[GPU PDF] ${candidateUrl} failed: ${lastError}`)
-          continue
-        }
-
-        const arrayBuf = await response.arrayBuffer()
-        const buf = Buffer.from(arrayBuf)
-        if (buf.byteLength === 0 || buf.byteLength > MAX_GPU_PDF_BYTES) {
-          lastError = `GPU PDF size out of bounds (${buf.byteLength} bytes)`
-          console.warn(`[GPU PDF] ${candidateUrl} skipped: ${lastError}`)
-          continue
-        }
-
+        pdfUrl = downloaded.sourceUrl
+        pdfBuffer = downloaded.buffer
+        pdfFilePath = downloaded.filePath
         console.log(
-          `[GPU PDF] Downloaded ${(buf.byteLength / (1024 * 1024)).toFixed(1)} MB from ${candidateUrl}`,
+          `[GPU PDF] ${downloaded.cached ? 'Reused disk cache' : 'Downloaded'} ${(downloaded.bytes / (1024 * 1024)).toFixed(1)} MB (${downloaded.filePath})`,
         )
-        pdfBuffer = buf
-        break
       } catch (err) {
         lastError = err instanceof Error ? err.message : 'Failed to fetch GPU regulation PDF'
-        console.warn(`[GPU PDF] ${candidateUrl} error: ${lastError}`)
+        console.warn(`[GPU PDF] GPU download failed: ${lastError}`)
+      }
+    }
+
+    if (!pdfBuffer && externalUrl) {
+      try {
+        const downloaded = await PdfDownloadService.downloadBufferParallel(
+          params.urlfic || externalUrl,
+          {
+            maxBytes: MAX_GPU_PDF_BYTES,
+            timeoutMs: GPU_PDF_FETCH_TIMEOUT_MS,
+          },
+        )
+        pdfUrl = downloaded.sourceUrl
+        pdfBuffer = downloaded.buffer
+        pdfFilePath = downloaded.filePath
+        console.log(
+          `[PLUi PDF] ${downloaded.cached ? 'Reused disk cache' : 'Parallel downloaded'} ${(downloaded.bytes / (1024 * 1024)).toFixed(1)} MB (${downloaded.filePath})`,
+        )
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : 'Failed to fetch PLUi PDF'
+        console.warn(`[PLUi PDF] ${externalUrl} error: ${lastError}`)
       }
     }
   }
@@ -335,7 +352,10 @@ export async function fetchGpuRegulationPdfText(params: {
         extractionArticles = cachedExtraction.articles
         extractionContentMap = cachedExtraction.contentMap
       } else {
-        const extraction = await PdfExtractor.extractTextAndArticles(pdfBuffer!)
+        const extraction = await PdfExtractor.extractTextAndArticles(
+          pdfFilePath || pdfBuffer!,
+          pageHint ? { pageHint } : {},
+        )
         if (extraction.articles.length === 0 && !extraction.text) {
           return { url: pdfUrl, articles: [], error: extraction.error || 'No text extracted from GPU PDF' }
         }
@@ -416,7 +436,7 @@ export async function fetchGpuRegulationPdfText(params: {
       }
     }
 
-    return {
+    const selectedResult = {
       url: pdfUrl,
       articles: selectArticlesForZone(
         extractionText,
@@ -425,6 +445,8 @@ export async function fetchGpuRegulationPdfText(params: {
       ),
       contentMap: extractionContentMap,
     }
+    PdfDownloadService.setCachedZoneResult(docIdentity, params.zoneCode, selectedResult)
+    return selectedResult
   } catch (err) {
     return {
       url: pdfUrl,
