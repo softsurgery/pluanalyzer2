@@ -160,7 +160,7 @@ export function WorkspaceClient({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { setIntro, clearIntro } = useIntro();
+  const { setIntro, setFloating, clearIntro, clearFloating } = useIntro();
 
   const [projectId, setProjectId] = useState<string>(initialProjectId || "");
   const [activeTab, setActiveTab] = useState<TabKey>(() =>
@@ -313,6 +313,19 @@ export function WorkspaceClient({
   const displayCadastre =
     cadastreNumbers.trim() || idu.trim() || snapshotCadastreFallback;
 
+  const generatedDateLabel = (() => {
+    if (!activeSnapshot?.createdAt) return "";
+    const parsed = new Date(activeSnapshot.createdAt);
+    if (Number.isNaN(parsed.getTime())) return "";
+    return parsed.toLocaleString("fr-FR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  })();
+
   useEffect(() => {
     const tabMeta = TAB_INTRO_META[activeTab];
     const locationPrefix = [displayAddress, displayCadastre]
@@ -323,6 +336,21 @@ export function WorkspaceClient({
       clearIntro?.();
     };
   }, [setIntro, clearIntro, activeTab, displayAddress, displayCadastre]);
+
+  useEffect(() => {
+    if (generatedDateLabel) {
+      setFloating?.(
+        <span className="text-xs text-muted-foreground">
+          Généré le {generatedDateLabel}
+        </span>,
+      );
+    } else {
+      clearFloating?.();
+    }
+    return () => {
+      clearFloating?.();
+    };
+  }, [setFloating, clearFloating, generatedDateLabel]);
 
   const handleTabChange = (nextTab: TabKey) => {
     if (!isTabEnabled(nextTab, tabSettings)) return;

@@ -74,32 +74,6 @@ export function CadastralInfoTab({
 
   return (
     <div className="space-y-4">
-      {isLoading ? (
-        <Card aria-busy="true" aria-label="Chargement du résumé d'analyse">
-          <CardHeader className="p-4 pb-1">
-            <Skeleton className="h-3 w-40" />
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <Skeleton className="h-4 w-full" />
-          </CardContent>
-        </Card>
-      ) : (
-        activeSnapshot && (
-          <Card>
-            <CardHeader className="p-4 pb-1">
-              <CardTitle className="text-xs font-bold">
-                {activeSnapshot.snapshotLabel}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 pt-0">
-              <p className="text-xs text-muted-foreground">
-                {activeSnapshot.originalPrompt}
-              </p>
-            </CardContent>
-          </Card>
-        )
-      )}
-
       <div
         className="grid grid-cols-2 gap-3 sm:grid-cols-3"
         aria-busy={isLoading || undefined}
