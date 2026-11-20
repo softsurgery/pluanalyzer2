@@ -515,9 +515,7 @@ export function WorkspaceClient({
         {tabSettings.showHistory && (
           <TabsContent value="history">
             <HistoryTab
-              snapshots={snapshots}
-              activeSnapshot={activeSnapshot}
-              isLoading={snapshotsQuery.isLoading}
+              projectId={projectId || undefined}
               isReplaying={replayMutation.isPending}
               replayingSnapshotId={replayMutation.variables}
               onReopenSnapshot={(snap) => {
