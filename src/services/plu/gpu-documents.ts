@@ -87,6 +87,110 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+const STOP_WORDS = new Set([
+  'pour', 'avec', 'dans', 'une', 'des', 'les', 'est', 'sont', 'sur', 'par',
+  'que', 'qui', 'quoi', 'quel', 'quelle', 'quelles', 'quels', 'cette', 'cet',
+  'mon', 'ma', 'mes', 'terrain', 'parcelle', 'projet', 'construction',
+])
+
+function extractPromptKeywords(prompt?: string): string[] {
+  if (!prompt) return []
+  const tokens = prompt
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 4 && !STOP_WORDS.has(w))
+  return Array.from(new Set(tokens)).slice(0, 12)
+}
+
+/**
+ * Filter and rank extracted PLU articles by relevance to the target zone, parent zone,
+ * core regulatory topics, and user prompt keywords.
+ */
+export function selectArticlesForZone(
+  fullText: string,
+  articles: ExtractedArticle[],
+  zoneCode?: string,
+  options: { maxArticles?: number; prompt?: string } = {},
+): ExtractedArticle[] {
+  const maxArticles = Math.max(5, options.maxArticles ?? 40)
+  if (!zoneCode) {
+    return articles.slice(0, maxArticles)
+  }
+
+  const zonePattern = escapeRegExp(zoneCode)
+  const parentZone = zoneCode.replace(/[0-9a-z]+$/i, '')
+  const parentPattern =
+    parentZone && parentZone !== zoneCode && parentZone.length >= 2
+      ? escapeRegExp(parentZone)
+      : null
+  const headerZoneRegex = new RegExp(`\\b${zonePattern}\\b`, 'i')
+  const regKeywords =
+    /(?:hauteur|emprise|recul|alignement|stationnement|pleine\s+terre|fa[îi]tage|cl[ôo]ture|aspect|oap|eaux\s+pluviales|m[èe]tres?|\d+\s*%)/i
+  const promptKeywords = extractPromptKeywords(options.prompt)
+
+  const scored = articles
+    .map((a) => {
+      let score = 0
+      if (headerZoneRegex.test(a.articleNumber) || headerZoneRegex.test(a.title)) score += 14
+      const contentMatches = a.content.match(new RegExp(`\\b${zonePattern}\\b`, 'gi'))?.length ?? 0
+      if (contentMatches > 0) score += Math.min(contentMatches * 3, 12)
+      if (parentPattern) {
+        const parentMatches =
+          a.content.match(new RegExp(`\\b${parentPattern}\\b`, 'gi'))?.length ?? 0
+        if (parentMatches > 0) score += Math.min(parentMatches * 2, 6)
+      }
+      if (a.content.length > 250) score += 2
+      if (regKeywords.test(a.content)) score += 4
+
+      if (promptKeywords.length > 0) {
+        const normalized = `${a.title} ${a.content}`
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+        for (const kw of promptKeywords) {
+          if (normalized.includes(kw)) score += 3
+        }
+      }
+      return { article: a, score }
+    })
+    .filter((item) => item.score >= 5)
+    .sort((a, b) => b.score - a.score)
+    .map((item) => item.article)
+
+  const zoneHeadingRegex = new RegExp(
+    `(?:(?:ZONE|CHAPITRE|DISPOSITIONS\\s+APPLICABLES\\s+[ÀA]\\s+LA\\s+ZONE)\\s+${zonePattern}\\b|^\\s*${zonePattern}\\s*$)`,
+    'gim',
+  )
+  const headingMatches = [...fullText.matchAll(zoneHeadingRegex)]
+  const bodyMatch =
+    headingMatches.find((m) => {
+      const idx = m.index ?? 0
+      const preview = fullText.slice(idx, idx + 1500)
+      return regKeywords.test(preview)
+    }) || headingMatches[Math.min(1, Math.max(0, headingMatches.length - 1))]
+
+  const sectionArticles: ExtractedArticle[] = []
+  if (bodyMatch && typeof bodyMatch.index === 'number') {
+    const slice = fullText.slice(bodyMatch.index, bodyMatch.index + 80000)
+    sectionArticles.push(...parsePluArticles(slice))
+  }
+
+  const combined = [...sectionArticles, ...scored]
+  const deduped: ExtractedArticle[] = []
+  const seen = new Set<string>()
+  for (const art of combined) {
+    const key = `${art.articleNumber}::${art.content.slice(0, 80)}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      deduped.push(art)
+    }
+  }
+
+  return deduped.length > 0 ? deduped.slice(0, maxArticles) : articles.slice(0, maxArticles)
+}
+
 export async function fetchGpuRegulationPdfText(params: {
   gpuDocId?: string
   nomfic?: string
@@ -95,6 +199,7 @@ export async function fetchGpuRegulationPdfText(params: {
   zoneCode?: string
   commune?: string
   codeInsee?: string
+  projectId?: number
   payload?: Payload
 }): Promise<{ url?: string; articles: ExtractedArticle[]; error?: string }> {
   const baseUrl =
@@ -142,11 +247,13 @@ export async function fetchGpuRegulationPdfText(params: {
   let lastError = 'Failed to fetch GPU regulation PDF'
 
   // Check Payload `documents` collection (backed by S3/RustFS) before downloading from GPU
-  if (!cachedExtraction && params.payload && params.gpuDocId) {
+  if (!cachedExtraction && params.payload && (params.gpuDocId || pdfUrl)) {
     try {
       const existingDocs = await params.payload.find({
         collection: 'documents',
-        where: { gpuDocumentId: { equals: params.gpuDocId } },
+        where: params.gpuDocId
+          ? { gpuDocumentId: { equals: params.gpuDocId } }
+          : { sourceUrl: { equals: pdfUrl } },
         limit: 1,
         depth: 0,
       })
@@ -241,18 +348,30 @@ export async function fetchGpuRegulationPdfText(params: {
           const title = params.commune
             ? `Règlement PLU/PLUi — ${params.commune} (${fileName})`
             : `Règlement PLU/PLUi — ${fileName}`
-          const mediaDoc = await params.payload.create({
+
+          // Reuse existing media upload if this exact filename was already uploaded to RustFS
+          const existingMedia = await params.payload.find({
             collection: 'media',
-            file: {
-              data: pdfBuffer,
-              mimetype: 'application/pdf',
-              name: fileName,
-              size: pdfBuffer.byteLength,
-            },
-            data: {
-              alt: title,
-            },
+            where: { filename: { equals: fileName } },
+            limit: 1,
+            depth: 0,
           })
+          const mediaDoc =
+            existingMedia.docs[0] ??
+            (await params.payload.create({
+              collection: 'media',
+              file: {
+                data: pdfBuffer,
+                mimetype: 'application/pdf',
+                name: fileName,
+                size: pdfBuffer.byteLength,
+              },
+              data: {
+                alt: title,
+              },
+            }))
+
+          const sanitizedText = extractionText.replace(/\u0000/g, '')
           const createdDoc = await params.payload.create({
             collection: 'documents',
             data: {
@@ -261,12 +380,14 @@ export async function fetchGpuRegulationPdfText(params: {
               documentType: 'reglement',
               commune: params.commune,
               codeInsee: params.codeInsee,
+              zoneCode: params.zoneCode,
               gpuDocumentId: params.gpuDocId,
               sourceUrl: pdfUrl,
               pageCount: extraction.pageCount,
               extractionStatus:
                 extraction.status === 'ocr_completed' ? 'ocr_completed' : 'extracted',
-              extractedText: extractionText,
+              extractedText: sanitizedText,
+              ...(params.projectId ? { project: params.projectId } : {}),
             },
           })
           console.log(
@@ -280,61 +401,14 @@ export async function fetchGpuRegulationPdfText(params: {
       }
     }
 
-    if (params.zoneCode) {
-      const zonePattern = escapeRegExp(params.zoneCode)
-      const headerZoneRegex = new RegExp(`\\b${zonePattern}\\b`, 'i')
-      const regKeywords = /(?:hauteur|emprise|recul|alignement|stationnement|pleine\s+terre|fa[îi]tage|m[èe]tres?|\d+\s*%)/i
-
-      const scored = extractionArticles
-        .map((a) => {
-          let score = 0
-          if (headerZoneRegex.test(a.articleNumber) || headerZoneRegex.test(a.title)) score += 12
-          const contentMatches = a.content.match(new RegExp(`\\b${zonePattern}\\b`, 'gi'))?.length ?? 0
-          if (contentMatches > 0) score += Math.min(contentMatches * 3, 12)
-          if (a.content.length > 250) score += 2
-          if (regKeywords.test(a.content)) score += 4
-          return { article: a, score }
-        })
-        .filter((item) => item.score >= 5)
-        .sort((a, b) => b.score - a.score)
-        .map((item) => item.article)
-
-      // Also check for a dedicated "ZONE <code>" / "CHAPITRE <code>" or standalone "<code>" body section
-      const zoneHeadingRegex = new RegExp(
-        `(?:(?:ZONE|CHAPITRE|DISPOSITIONS\\s+APPLICABLES\\s+[ÀA]\\s+LA\\s+ZONE)\\s+${zonePattern}\\b|^\\s*${zonePattern}\\s*$)`,
-        'gim',
-      )
-      const headingMatches = [...extractionText.matchAll(zoneHeadingRegex)]
-      const bodyMatch =
-        headingMatches.find((m) => {
-          const idx = m.index ?? 0
-          const preview = extractionText.slice(idx, idx + 1500)
-          return regKeywords.test(preview)
-        }) || headingMatches[Math.min(1, Math.max(0, headingMatches.length - 1))]
-
-      const sectionArticles: ExtractedArticle[] = []
-      if (bodyMatch && typeof bodyMatch.index === 'number') {
-        const slice = extractionText.slice(bodyMatch.index, bodyMatch.index + 18000)
-        sectionArticles.push(...parsePluArticles(slice))
-      }
-
-      const combined = [...sectionArticles, ...scored]
-      const deduped: ExtractedArticle[] = []
-      const seen = new Set<string>()
-      for (const art of combined) {
-        const key = `${art.articleNumber}::${art.content.slice(0, 80)}`
-        if (!seen.has(key)) {
-          seen.add(key)
-          deduped.push(art)
-        }
-      }
-
-      if (deduped.length > 0) {
-        return { url: pdfUrl, articles: deduped.slice(0, 20) }
-      }
+    return {
+      url: pdfUrl,
+      articles: selectArticlesForZone(
+        extractionText,
+        extractionArticles,
+        params.zoneCode,
+      ),
     }
-
-    return { url: pdfUrl, articles: extractionArticles.slice(0, 15) }
   } catch (err) {
     return {
       url: pdfUrl,

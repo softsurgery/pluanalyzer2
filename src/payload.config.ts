@@ -56,14 +56,14 @@ export default buildConfig({
           prefix: "media",
         },
       },
-      bucket: process.env.S3_BUCKET || "plu-analyzer",
+      bucket: process.env.S3_BUCKET || "plu",
       config: {
         endpoint: process.env.S3_ENDPOINT || "http://localhost:9090",
         region: process.env.S3_REGION || "us-east-1",
         forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== "false",
         credentials: {
           accessKeyId: process.env.S3_ACCESS_KEY_ID || "rustfsadmin",
-          secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || "rustfsadmin",
+          secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || "password",
         },
       },
     }),

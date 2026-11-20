@@ -32,6 +32,9 @@ export interface InterpretRegulationsParams {
   commune?: string
   articles: ExtractedArticle[]
   existingRules?: Partial<StructuredRegulatoryRules>
+  gisContext?: string
+  maxContextChars?: number
+  maxArticles?: number
   ollama?: OllamaService
 }
 
@@ -96,12 +99,14 @@ export function buildPluRegulatorySystemPrompt(): string {
       '    "minGreenRatio": number|null,         // espaces végétalisés, seulement si un pourcentage est écrit',
       '    "parkingPerDwelling": number|null',
       '  },',
-      '  "summary": string,                      // synthèse structurée reprenant les règles au format « —\\nCatégorie = Règle (exceptions) — Article X »',
-      '  "details": {                            // paragraphes COMPLETS et détaillés de chaque règle trouvée, incluant la règle de base, les exceptions/conditions entre parenthèses ou après « ; », et « — Article X » à la fin ; clés possibles :',
-      '    "stationnement": string, "aspect_exterieur": string, "servitudes": string, "oap": string,',
+      '  "summary": string,                      // synthèse en Markdown (.md) débutant par un paragraphe clair et complet (3 à 5 phrases) résumant le profil réglementaire de la zone, ses règles clés et ses exceptions (strictement d’après le texte fourni)',
+      '  "details": {                            // paragraphes COMPLETS et détaillés de chaque règle/donnée trouvée, incluant la règle de base, les exceptions/conditions et « — Article X » à la fin ; clés possibles :',
       '    "hauteur_facade": string, "hauteur_totale": string, "emprise": string, "recul_voies": string,',
-      '    "limites_separatives": string, "entre_batiments": string, "espaces_vegetalises": string,',
-      '    "pleine_terre": string, "clotures": string, "eaux_pluviales": string',
+      '    "limites_separatives": string, "entre_batiments": string,',
+      '    "stationnement": string, "aspect_exterieur": string,',
+      '    "espaces_vegetalises": string, "pleine_terre": string, "clotures": string, "eaux_pluviales": string,',
+      '    "servitudes": string, "servitudes_utilite_publique": string, "informations_foncieres": string,',
+      '    "risques": string, "oap": string, "points_de_vigilance": string',
       '  },',
       '  "citations": [{"article": string, "excerpt": string}],   // extraits EXACTS',
       '  "warnings": [string]                                      // règles absentes, bonifications, cas ambigus',
@@ -117,20 +122,24 @@ export function buildPluRegulatorySystemPrompt(): string {
 }
 
 const DETAIL_LABELS: Record<string, string> = {
-  stationnement: 'Stationnement',
-  aspect_exterieur: 'Aspect extérieur',
-  servitudes: 'Servitudes',
-  oap: 'OAP',
   hauteur_facade: 'Hauteur de façade',
   hauteur_totale: 'Hauteur totale',
   emprise: 'Emprise au sol',
   recul_voies: 'Retrait sur voies',
   limites_separatives: 'Limites séparatives',
   entre_batiments: "Entre bâtiments d'un même terrain",
+  stationnement: 'Stationnement',
+  aspect_exterieur: 'Aspect extérieur',
   espaces_vegetalises: 'Espaces végétalisés',
   pleine_terre: 'Pleine terre',
   clotures: 'Clôtures',
   eaux_pluviales: 'Eaux pluviales',
+  servitudes: 'Servitudes (Règlement graphique)',
+  servitudes_utilite_publique: "Servitudes d'utilité publique (SUP)",
+  informations_foncieres: 'Informations (DPU, RLPi, périmètres)',
+  risques: 'Risques naturels / PPRI',
+  oap: 'OAP applicable',
+  points_de_vigilance: 'Points de vigilance',
 }
 
 function formatRegulatorySynthesis(
@@ -148,21 +157,57 @@ function formatRegulatorySynthesis(
     const val = rawVal.trim()
     if (!val || /^non\s+r[ée]glement[ée]$/i.test(val)) continue
     const label = DETAIL_LABELS[key] || key.replace(/_/g, ' ')
-    blocks.push(`—\n${label} = ${val}`)
+    blocks.push(`- **${label}** = ${val}`)
   }
   return blocks.length > 0 ? blocks.join('\n') : undefined
+}
+
+function rankArticlesForPrompt(
+  articles: ExtractedArticle[],
+  zoneCode?: string,
+  prompt?: string,
+  maxArticles = 40,
+): ExtractedArticle[] {
+  if (articles.length <= maxArticles) return articles
+
+  const zoneLower = zoneCode?.trim().toLowerCase()
+  const promptWords = (prompt || '')
+    .toLowerCase()
+    .split(/[^a-z0-9àâéèêëîïôùûüç]+/i)
+    .filter((w) => w.length >= 4)
+
+  const coreRegex =
+    /(?:hauteur|emprise|recul|alignement|stationnement|pleine\s+terre|cl[ôo]ture|aspect|oap|eaux\s+pluviales|article\s*(?:1|2|3|4|5|6|7|8|9|10|11|12|13))/i
+
+  return [...articles]
+    .map((a, idx) => {
+      let score = 0
+      const haystack = `${a.articleNumber} ${a.title} ${a.content}`.toLowerCase()
+      if (zoneLower && haystack.includes(zoneLower)) score += 10
+      if (coreRegex.test(haystack)) score += 6
+      for (const word of promptWords) {
+        if (haystack.includes(word)) score += 3
+      }
+      // Preserve natural article order as a tiebreaker
+      return { article: a, score, idx }
+    })
+    .sort((a, b) => b.score - a.score || a.idx - b.idx)
+    .slice(0, maxArticles)
+    .map((x) => x.article)
 }
 
 const USER_PROMPT_TEMPLATE = PromptTemplate.from<{
   commune: string
   zoneCode: string
   parcelSurfaceM2: string | number
+  gisContext: string
   prompt: string
   contextText: string
 }>([
   'Commune: {{commune}}',
   'Zone PLU: {{zoneCode}}',
   'Surface parcelle (m²): {{parcelSurfaceM2}}',
+  'Servitudes / Informations GIS & GPU: {{gisContext}}',
   'User Feasibility Prompt: {{prompt}}',
   '',
   'Official PLU Excerpts:',
@@ -239,18 +284,27 @@ export function createPluRegulatoryExtractionPipeline(ollama?: OllamaService) {
     options: { num_predict: 4096 },
     systemPrompt,
     userPrompt: (params) => {
+      const maxChars = Math.max(5000, params.maxContextChars ?? 90000)
+      const maxArticles = Math.max(5, params.maxArticles ?? 40)
+      const rankedArticles = rankArticlesForPrompt(
+        params.articles,
+        params.zoneCode,
+        params.prompt,
+        maxArticles,
+      )
       const contextText = formatContextChunks(
-        params.articles.map((a) => ({
+        rankedArticles.map((a) => ({
           id: a.articleNumber,
           title: a.title,
           content: a.content,
         })),
-        { maxChars: 36000 },
+        { maxChars },
       )
       return USER_PROMPT_TEMPLATE.render({
         commune: params.commune || 'Unknown',
         zoneCode: params.zoneCode || 'Unknown',
         parcelSurfaceM2: params.parcelSurfaceM2 ?? 'Non disponible',
+        gisContext: params.gisContext || 'Aucune servitude ou information complémentaire fournie',
         prompt: params.prompt,
         contextText,
       })
@@ -269,8 +323,14 @@ export function createPluRegulatoryExtractionPipeline(ollama?: OllamaService) {
       const details =
         parsed.details && typeof parsed.details === 'object' ? parsed.details : undefined
       const detailsSummary = formatRegulatorySynthesis(details)
+      const aiParagraph =
+        typeof parsed.summary === 'string' && parsed.summary.trim().length > 0
+          ? parsed.summary.trim()
+          : undefined
       const resolvedSummary =
-        detailsSummary || parsed.summary || 'Extraction réglementaire terminée.'
+        aiParagraph && detailsSummary
+          ? `${aiParagraph}\n\n---\n\n### Détail des règles extraites\n\n${detailsSummary}`
+          : aiParagraph || detailsSummary || 'Extraction réglementaire terminée.'
 
       console.log(
         `[Ollama] Model ${model} succeeded (summaryChars=${resolvedSummary.length}, citations=${Array.isArray(parsed.citations) ? parsed.citations.length : 0})`,

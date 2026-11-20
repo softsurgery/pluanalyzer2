@@ -263,11 +263,6 @@ export const Consumption: React.FC<ConsumptionProps> = ({
                     >
                       <TableCell className="px-3 py-2 text-sm font-medium">
                         {formatBucketDate(bucket.from, granularity)}
-                        {bucket.partial ? (
-                          <span className="ml-1.5 text-xs text-[var(--theme-elevation-500)]">
-                            (en cours)
-                          </span>
-                        ) : null}
                       </TableCell>
                       <TableCell className="px-3 py-2 text-right text-sm">
                         {formatNumber(bucket.request_count)}

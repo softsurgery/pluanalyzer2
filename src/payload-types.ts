@@ -1019,6 +1019,14 @@ export interface WorkspaceSetting {
    * Modèle IA utilisé globalement pour toutes les analyses PLU (si non défini, le modèle marqué par défaut dans AI Models est utilisé).
    */
   defaultAiModel?: (number | null) | AiModel;
+  /**
+   * Nombre maximal de caractères extraits des documents PDF envoyés au modèle IA (défaut : 90 000).
+   */
+  maxPdfCharsToAi?: number | null;
+  /**
+   * Nombre maximal d’articles pertinents sélectionnés et envoyés à l’IA par analyse (défaut : 40).
+   */
+  maxPdfArticlesToAi?: number | null;
   tabs?: {
     showRegulations?: boolean | null;
     showCadastralInfo?: boolean | null;
@@ -1036,6 +1044,8 @@ export interface WorkspaceSetting {
  */
 export interface WorkspaceSettingsSelect<T extends boolean = true> {
   defaultAiModel?: T;
+  maxPdfCharsToAi?: T;
+  maxPdfArticlesToAi?: T;
   tabs?:
     | T
     | {

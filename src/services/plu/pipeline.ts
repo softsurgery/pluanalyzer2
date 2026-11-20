@@ -6,6 +6,7 @@ import { fetchMetropoleArcgisZoning } from "@/services/plu/metropole-arcgis";
 import {
   fetchGpuDocuments,
   fetchGpuRegulationPdfText,
+  selectArticlesForZone,
 } from "@/services/plu/gpu-documents";
 import { parsePluArticles } from "@/services/plu/pdf-extractor";
 import { interpretRegulationsWithOllama } from "@/services/plu/ollama-interpreter";
@@ -406,6 +407,40 @@ export async function runPluAnalysisPipeline(
       );
     }
 
+    // Load workspace settings (default AI model + PDF-to-AI context budgets)
+    let globalDefaultModel: string | undefined;
+    let maxPdfCharsToAi = 90000;
+    let maxPdfArticlesToAi = 40;
+    try {
+      const workspaceSettings = await payload.findGlobal({
+        slug: "workspace-settings",
+        depth: 1,
+      });
+      const rel = workspaceSettings?.defaultAiModel;
+      if (
+        rel &&
+        typeof rel === "object" &&
+        "model" in rel &&
+        typeof rel.model === "string"
+      ) {
+        globalDefaultModel = rel.model;
+      }
+      if (
+        typeof workspaceSettings?.maxPdfCharsToAi === "number" &&
+        workspaceSettings.maxPdfCharsToAi >= 5000
+      ) {
+        maxPdfCharsToAi = workspaceSettings.maxPdfCharsToAi;
+      }
+      if (
+        typeof workspaceSettings?.maxPdfArticlesToAi === "number" &&
+        workspaceSettings.maxPdfArticlesToAi >= 5
+      ) {
+        maxPdfArticlesToAi = workspaceSettings.maxPdfArticlesToAi;
+      }
+    } catch {
+      // Ignore if workspace-settings global is not yet initialized
+    }
+
     // 7. Load Stored Documents & Regulations from Payload CMS
     const regStart = Date.now();
     const matchingDocs = await payload.find({
@@ -457,7 +492,13 @@ export async function runPluAnalysisPipeline(
     }
     for (const doc of matchingDocs.docs) {
       if (doc.extractedText && doc.extractedText.trim().length > 0) {
-        extractedArticles.push(...parsePluArticles(doc.extractedText));
+        const parsed = parsePluArticles(doc.extractedText);
+        extractedArticles.push(
+          ...selectArticlesForZone(doc.extractedText, parsed, resolvedZoneCode, {
+            maxArticles: maxPdfArticlesToAi,
+            prompt: input.prompt,
+          }),
+        );
       }
     }
     logStep(
@@ -467,30 +508,60 @@ export async function runPluAnalysisPipeline(
       `Loaded ${matchingRegs.docs.length} regulation(s) and ${matchingDocs.docs.length} document(s)`,
     );
 
-    // 7b. Auto-download & extract official GPU regulation PDF if no articles were found locally
+    // 7b. Auto-discover, download, extract & persist official GPU regulation PDF when not yet stored in `documents`
     const primaryZone = apicartoResult?.zones?.[0];
+    const fallbackGpuDoc = gpuDocs.documents.find((d) =>
+      d.files?.some((f) => /\.pdf$/i.test(f.name)),
+    );
+    const fallbackPdfFile =
+      fallbackGpuDoc?.files?.find((f) => /reglement/i.test(f.name) && /\.pdf$/i.test(f.name)) ||
+      fallbackGpuDoc?.files?.find((f) => /\.pdf$/i.test(f.name));
+
+    const targetGpuDocId = primaryZone?.gpu_doc_id || fallbackGpuDoc?.id;
+    const targetNomfic = primaryZone?.nomfic || fallbackPdfFile?.name;
+    const targetUrlfic = primaryZone?.urlfic || fallbackPdfFile?.url;
+    const targetPartition = primaryZone?.partition || fallbackGpuDoc?.partition;
+
+    const alreadyStoredInDocs = matchingDocs.docs.some(
+      (d) =>
+        (targetGpuDocId && d.gpuDocumentId === targetGpuDocId) ||
+        (targetUrlfic && d.sourceUrl === targetUrlfic),
+    );
+
     if (
-      extractedArticles.length === 0 &&
-      (primaryZone?.urlfic || (primaryZone?.gpu_doc_id && primaryZone?.nomfic))
+      !alreadyStoredInDocs &&
+      (targetUrlfic || (targetGpuDocId && targetNomfic))
     ) {
       const pdfStart = Date.now();
       const gpuPdf = await fetchGpuRegulationPdfText({
-        gpuDocId: primaryZone.gpu_doc_id,
-        nomfic: primaryZone.nomfic,
-        urlfic: primaryZone.urlfic,
-        partition: primaryZone.partition,
+        gpuDocId: targetGpuDocId,
+        nomfic: targetNomfic,
+        urlfic: targetUrlfic,
+        partition: targetPartition,
         zoneCode: resolvedZoneCode,
         commune: parcelDoc?.commune || project.commune,
-        codeInsee: parcelDoc?.codeInsee || project.codeInsee,
+        codeInsee: resolvedCodeInsee,
+        projectId: project.id,
         payload,
       });
       if (gpuPdf.articles.length > 0) {
-        extractedArticles.push(...gpuPdf.articles);
+        const seenArticles = new Set(
+          extractedArticles.map(
+            (a) => `${a.articleNumber}::${a.content.slice(0, 80)}`,
+          ),
+        );
+        for (const art of gpuPdf.articles) {
+          const key = `${art.articleNumber}::${art.content.slice(0, 80)}`;
+          if (!seenArticles.has(key)) {
+            seenArticles.add(key);
+            extractedArticles.push(art);
+          }
+        }
         logStep(
           "gpu_pdf_extraction",
           "ok",
           pdfStart,
-          `Extracted ${gpuPdf.articles.length} article(s) from official GPU PDF (${primaryZone.nomfic || gpuPdf.url})`,
+          `Extracted ${gpuPdf.articles.length} article(s) from official GPU PDF (${targetNomfic || gpuPdf.url})`,
         );
       } else {
         logStep(
@@ -511,24 +582,6 @@ export async function runPluAnalysisPipeline(
       sort: "-isDefault,createdAt",
       limit: 20,
     });
-    let globalDefaultModel: string | undefined;
-    try {
-      const workspaceSettings = await payload.findGlobal({
-        slug: "workspace-settings",
-        depth: 1,
-      });
-      const rel = workspaceSettings?.defaultAiModel;
-      if (
-        rel &&
-        typeof rel === "object" &&
-        "model" in rel &&
-        typeof rel.model === "string"
-      ) {
-        globalDefaultModel = rel.model;
-      }
-    } catch {
-      // Ignore if workspace-settings global is not yet initialized
-    }
     const activeModelSlugs = activeModelsResult.docs.map((m) => m.model);
     const defaultActiveModel =
       globalDefaultModel ||
@@ -545,6 +598,46 @@ export async function runPluAnalysisPipeline(
       `[PLU Pipeline] [${executionCode}] Invoking Ollama AI Pipeline: model=${resolvedModel} fallbacks=${fallbackModels.length} articles=${extractedArticles.length} zone=${resolvedZoneCode || "unknown"} surfaceM2=${parcelDoc?.surfaceM2 ?? "null"}`,
     );
 
+    const extractLabel = (item: unknown): string | undefined => {
+      if (!item || typeof item !== "object") return undefined;
+      const obj = item as Record<string, unknown>;
+      const props =
+        obj.properties && typeof obj.properties === "object"
+          ? (obj.properties as Record<string, unknown>)
+          : obj;
+      const label =
+        props.libelle || props.lib_id || props.typepsc || props.typeinf || props.txt;
+      return typeof label === "string" && label.trim() ? label.trim() : undefined;
+    };
+
+    const gisContextParts: string[] = [];
+    const prescGroups = apicartoResult?.prescriptions;
+    if (prescGroups) {
+      const prescItems = [
+        ...prescGroups.surf,
+        ...prescGroups.lin,
+        ...prescGroups.pct,
+      ]
+        .map(extractLabel)
+        .filter((v): v is string => Boolean(v));
+      if (prescItems.length > 0) {
+        gisContextParts.push(
+          `Prescriptions graphiques: ${Array.from(new Set(prescItems)).slice(0, 10).join("; ")}`,
+        );
+      }
+      const infoItems = prescGroups.infoSurf
+        .map(extractLabel)
+        .filter((v): v is string => Boolean(v));
+      if (infoItems.length > 0) {
+        gisContextParts.push(
+          `Informations (DPU, RLPi, périmètres): ${Array.from(new Set(infoItems)).slice(0, 10).join("; ")}`,
+        );
+      }
+    }
+    if (arcgisResult?.zoneLabel) {
+      gisContextParts.push(`Zonage ArcGIS: ${arcgisResult.zoneLabel}`);
+    }
+
     const interpretation = await interpretRegulationsWithOllama({
       prompt: input.prompt,
       model: resolvedModel,
@@ -554,6 +647,9 @@ export async function runPluAnalysisPipeline(
       commune: parcelDoc?.commune || project.commune,
       articles: extractedArticles,
       existingRules: baseRules,
+      gisContext: gisContextParts.join(" | ") || undefined,
+      maxContextChars: maxPdfCharsToAi,
+      maxArticles: maxPdfArticlesToAi,
     });
     console.log(
       `[PLU Pipeline] [${executionCode}] Ollama AI Pipeline finished: status=${interpretation.status} model=${interpretation.model} citations=${interpretation.citations.length} warnings=${interpretation.warnings.length}`,

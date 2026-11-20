@@ -9,7 +9,7 @@ export const documentKeys = {
 
 export async function fetchDocuments(limit = 50): Promise<PaginatedResponse<DocumentItem>> {
   return apiFetch<PaginatedResponse<DocumentItem>>(
-    `/api/documents?sort=-updatedAt&limit=${limit}`,
+    `/api/documents?sort=-updatedAt&limit=${limit}&depth=1`,
   )
 }
 

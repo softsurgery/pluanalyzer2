@@ -83,6 +83,7 @@ export const Documents: CollectionConfig = {
       name: 'extractedText',
       type: 'textarea',
       label: 'Extracted Regulatory Text',
+      maxLength: 5_000_000,
     },
     {
       name: 'extractionMetadata',

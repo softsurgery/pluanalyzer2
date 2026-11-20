@@ -24,6 +24,30 @@ export const WorkspaceSettings: GlobalConfig = {
       },
     },
     {
+      name: "maxPdfCharsToAi",
+      type: "number",
+      defaultValue: 90000,
+      min: 5000,
+      max: 500000,
+      label: "Taille max du contenu PDF envoyé à l’IA (caractères)",
+      admin: {
+        description:
+          "Nombre maximal de caractères extraits des documents PDF envoyés au modèle IA (défaut : 90 000).",
+      },
+    },
+    {
+      name: "maxPdfArticlesToAi",
+      type: "number",
+      defaultValue: 40,
+      min: 5,
+      max: 100,
+      label: "Nombre max d’articles PDF envoyés à l’IA",
+      admin: {
+        description:
+          "Nombre maximal d’articles pertinents sélectionnés et envoyés à l’IA par analyse (défaut : 40).",
+      },
+    },
+    {
       name: "model-details",
       type: "ui",
       admin: {

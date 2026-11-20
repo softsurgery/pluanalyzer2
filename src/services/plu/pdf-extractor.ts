@@ -77,7 +77,7 @@ export async function extractPdfTextAndArticles(
       console.warn = origWarn
       console.log = origLog
     }
-    const rawText = (parsed.text || '').trim()
+    const rawText = (parsed.text || '').replace(/\u0000/g, '').trim()
     const pageCount = parsed.numpages || 1
 
     if (rawText.length >= 80) {
