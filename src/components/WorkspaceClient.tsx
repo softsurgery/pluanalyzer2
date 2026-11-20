@@ -39,6 +39,7 @@ import {
   RegulationsTab,
 } from "@/components/workspace/RegulationsTab";
 import { SettingsTab } from "@/components/workspace/SettingsTab";
+import { useIntro } from "@/contexts/IntroProvider";
 import { useAnalysisStore } from "@/hooks/stores/useAnalysisStore";
 import { createAnalysisSchema, validateForm } from "@/validations";
 
@@ -69,6 +70,44 @@ const SELECTABLE_TABS: readonly TabKey[] = [
   "json",
   "settings",
 ];
+
+const TAB_INTRO_META: Record<TabKey, { label: string; description: string }> = {
+  analysis: {
+    label: "Informations Cadastral",
+    description:
+      "Localisez la parcelle sur la carte et lancez une analyse réglementaire PLU.",
+  },
+  constructibility: {
+    label: "Réglementation",
+    description:
+      "Consultez les indicateurs de constructibilité, les articles extraits et la synthèse réglementaire.",
+  },
+  regulations: {
+    label: "Faisabilité",
+    description:
+      "Évaluez la faisabilité du projet au regard des règles d'urbanisme applicables.",
+  },
+  history: {
+    label: "Historique",
+    description:
+      "Parcourez l'historique des snapshots d'analyse et relancez-les à tout moment.",
+  },
+  compare: {
+    label: "Comparaison",
+    description:
+      "Comparez deux snapshots d'analyse pour identifier les écarts réglementaires.",
+  },
+  json: {
+    label: "Inspecteur JSON",
+    description:
+      "Inspectez les données brutes JSON du snapshot d'analyse sélectionné.",
+  },
+  settings: {
+    label: "Paramètres",
+    description:
+      "Gérez les informations du projet, l'exportation de l'analyse et les options avancées.",
+  },
+};
 
 function isTabEnabled(
   tab: TabKey,
@@ -121,6 +160,7 @@ export function WorkspaceClient({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const { setIntro, clearIntro } = useIntro();
 
   const [projectId, setProjectId] = useState<string>(initialProjectId || "");
   const [activeTab, setActiveTab] = useState<TabKey>(() =>
@@ -241,6 +281,48 @@ export function WorkspaceClient({
   const currentProject =
     projects.find((p) => String(p.id) === projectId) || null;
   const canDeleteProject = userRole !== "viewer";
+
+  const snapshotGeoLabel = activeSnapshot?.geocodingResult?.label;
+  const displayAddress =
+    address.trim() ||
+    (typeof snapshotGeoLabel === "string" ? snapshotGeoLabel.trim() : "") ||
+    activeSnapshot?.addressQuery?.trim() ||
+    currentProject?.name?.trim() ||
+    "Espace de travail";
+
+  const snapshotCadastral = activeSnapshot?.cadastralReferences;
+  const snapshotCadastreFallback = (() => {
+    if (!snapshotCadastral) return "";
+    if (
+      typeof snapshotCadastral.idu === "string" &&
+      snapshotCadastral.idu.trim()
+    ) {
+      return snapshotCadastral.idu.trim();
+    }
+    const section =
+      typeof snapshotCadastral.section === "string"
+        ? snapshotCadastral.section.trim()
+        : "";
+    const numero =
+      typeof snapshotCadastral.numero === "string"
+        ? snapshotCadastral.numero.trim()
+        : "";
+    return [section, numero].filter(Boolean).join(" ");
+  })();
+
+  const displayCadastre =
+    cadastreNumbers.trim() || idu.trim() || snapshotCadastreFallback;
+
+  useEffect(() => {
+    const tabMeta = TAB_INTRO_META[activeTab];
+    const locationPrefix = [displayAddress, displayCadastre]
+      .filter(Boolean)
+      .join(", ");
+    setIntro?.(`${locationPrefix} — ${tabMeta.label}`, tabMeta.description);
+    return () => {
+      clearIntro?.();
+    };
+  }, [setIntro, clearIntro, activeTab, displayAddress, displayCadastre]);
 
   const handleTabChange = (nextTab: TabKey) => {
     if (!isTabEnabled(nextTab, tabSettings)) return;
