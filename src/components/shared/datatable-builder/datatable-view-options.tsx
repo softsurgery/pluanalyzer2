@@ -49,7 +49,10 @@ export function DataTableViewOptions<TData>({
                 }
                 onSelect={(event) => event.preventDefault()}
               >
-                {column.id}
+                {column.columnDef.meta?.title ??
+                  (typeof column.columnDef.header === "string"
+                    ? column.columnDef.header
+                    : column.id)}
               </DropdownMenuCheckboxItem>
             );
           })}

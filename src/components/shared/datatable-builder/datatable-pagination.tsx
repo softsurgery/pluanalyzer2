@@ -22,7 +22,7 @@ export function DataTablePagination<TData>({
   className,
 }: DataTablePaginationProps<TData>) {
   return (
-    <div className={cn("flex items-center justify-between", className)}>
+    <div className={cn("flex w-full items-center justify-between", className)}>
       <div className="flex items-center space-x-2 ">
         <div className="flex items-center space-x-2">
           {[10, 50, 100].map((size) => {
