@@ -18,5 +18,25 @@ services:
       timeout: 5s
       retries: 10
 
+  rustfs:
+    image: rustfs/rustfs:latest
+    pull_policy: if_not_present
+    container_name: plu-analyzer-rustfs
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: password
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    ports:
+      - "9090:9000"
+      - "9091:9001"
+    volumes:
+      - plu_rustfs_data:/data
+      - plu_rustfs_logs:/logs
+
 volumes:
   plu_pgdata:
+  plu_rustfs_data:
+  plu_rustfs_logs:
