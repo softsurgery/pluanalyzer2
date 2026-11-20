@@ -114,7 +114,7 @@ export function DataTable<TData, TValue>({
     <div className={cn(className, "space-y-4")}>
       <DataTableToolbar table={table} context={context} />
       <div className={cn("rounded-lg border", containerClassName)}>
-        <Table>
+        <Table wrapperClassName={sticky ? "overflow-visible" : undefined}>
           <TableHeader
             className={cn(
               sticky && "sticky top-0 z-10 bg-background [&_th]:bg-background",
